@@ -1,9 +1,8 @@
 """
-Home Fragrance AutoPack — Streamlit Web App
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Data is stored in Google Sheets. Images are stored in Google Drive.
-See README_SETUP.txt for full setup instructions.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Home Fragrance AutoPack — Streamlit Web App v2
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+See secrets_template.toml for required credentials.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import streamlit as st
@@ -12,11 +11,10 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from datetime import datetime
-import uuid
-import io
+import uuid, io, re, requests
 
 # ─────────────────────────────────────────────────────────────────
-#  PAGE CONFIG  (must be the very first Streamlit call)
+#  PAGE CONFIG
 # ─────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Home Fragrance AutoPack",
@@ -26,27 +24,30 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────────
-#  GLOBAL STYLES
+#  STYLES
 # ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* ── Hide Streamlit chrome ───────────────────────────────────── */
+/* ── Hide Streamlit chrome ───────────────────────────────── */
 #MainMenu, footer, header { visibility: hidden; }
 .stDeployButton { display: none; }
 
-/* ── Page background ─────────────────────────────────────────── */
-.stApp { background-color: #F4F4F6; }
+/* ── Full window width ───────────────────────────────────── */
+.stApp { background: #F4F4F6; }
 .block-container {
-    padding-top: 1rem;
-    padding-bottom: 2rem;
-    max-width: 1300px;
+    padding: 0 !important;
+    max-width: 100% !important;
+}
+section[data-testid="stMainBlockContainer"] {
+    padding: 0 !important;
+    max-width: 100% !important;
 }
 
-/* ── Tab bar  ────────────────────────────────────────────────── */
+/* ── Tab bar ─────────────────────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] {
-    background-color: #FFFFFF;
+    background: white;
     border-bottom: 1px solid #DEDEDE;
-    padding: 0 8px;
+    padding: 8px 24px 0;
     gap: 4px;
 }
 .stTabs [data-baseweb="tab"] {
@@ -59,33 +60,136 @@ st.markdown("""
     border: none;
 }
 .stTabs [aria-selected="true"] {
-    background-color: #111111 !important;
+    background: #111111 !important;
     color: #FFFFFF !important;
     border-radius: 20px;
 }
-.stTabs [data-baseweb="tab-highlight"] { display: none; }
-.stTabs [data-baseweb="tab-border"]    { display: none; }
+.stTabs [data-baseweb="tab-highlight"],
+.stTabs [data-baseweb="tab-border"] { display: none; }
+div[data-testid="stTabs"] > div:first-child {
+    margin-bottom: 0 !important;
+}
 
-/* ── Page title ──────────────────────────────────────────────── */
+/* ── Page titles ─────────────────────────────────────────── */
 .page-title {
     font-size: 26px;
     font-weight: 900;
     color: #1A1A1A;
     letter-spacing: -0.5px;
-    margin-bottom: 16px;
-    margin-top: 8px;
+    padding: 20px 24px 4px;
+}
+.page-title-icon { margin-right: 10px; }
+
+/* ── ALL CAPS on every text input & textarea ─────────────── */
+input[type="text"], textarea {
+    text-transform: uppercase !important;
+    text-align: center !important;
+    font-size: 11px !important;
+    letter-spacing: 0.3px !important;
+}
+/* Exception: search bar stays normal */
+input.search-input {
+    text-transform: none !important;
+    text-align: left !important;
+    font-size: 14px !important;
 }
 
-/* ── Item card ───────────────────────────────────────────────── */
-.item-card {
-    background: #FFFFFF;
+/* ── Remove labels from inputs ───────────────────────────── */
+div.stTextInput  > label { display: none !important; }
+div.stTextArea   > label { display: none !important; }
+
+/* ── Input field styling (bordered rows in cards) ────────── */
+div.stTextInput > div {
+    border: none !important;
+    border-bottom: 1px solid #DEDEDE !important;
+    border-radius: 0 !important;
+    background: white;
+}
+div.stTextInput > div > div { border: none !important; }
+div.stTextInput > div > div > input {
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 8px 8px !important;
+    background: white !important;
+    box-shadow: none !important;
+}
+div.stTextInput > div:focus-within {
+    border-bottom: 1px solid #888 !important;
+    box-shadow: none !important;
+}
+
+/* Ops-notes textarea */
+div.stTextArea > div { border: none !important; border-top: 1px solid #DEDEDE !important; border-radius: 0 !important; }
+div.stTextArea > div > div > textarea {
+    border: none !important;
+    border-radius: 0 !important;
+    background: white !important;
+    min-height: 60px !important;
+    font-size: 11px !important;
+    text-align: center !important;
+    text-transform: uppercase !important;
+    box-shadow: none !important;
+}
+
+/* ── File uploader (image area) ──────────────────────────── */
+div[data-testid="stFileUploaderDropzone"] {
+    background: white !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 18px 8px !important;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+div[data-testid="stFileUploaderDropzoneInstructions"] > div > span {
+    font-size: 11px !important;
+    color: #C7C7CC !important;
+}
+div[data-testid="stFileUploaderDropzoneInstructions"] > div > small { display: none; }
+div[data-testid="stFileUploader"] section > button { display: none; }
+
+/* ── Upcoming card column borders ────────────────────────── */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background: white !important;
+    border: 1px solid #DEDEDE !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+div[data-testid="stVerticalBlockBorderWrapper"] > div {
+    padding: 0 !important;
+    gap: 0 !important;
+}
+/* Remove gap between stacked inputs */
+div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
+    margin: 0 !important;
+}
+
+/* ── Read-only field rows (CW / Reshoot) ─────────────────── */
+.ro-field {
+    background: white;
+    border-bottom: 1px solid #DEDEDE;
+    padding: 7px 8px;
+    font-size: 11px;
+    text-align: center;
+    text-transform: uppercase;
+    color: #1A1A1A;
+    letter-spacing: 0.3px;
+    min-height: 32px;
+}
+.ro-field.placeholder { color: #C7C7CC; }
+.ro-card {
+    background: white;
     border: 1px solid #DEDEDE;
     border-radius: 6px;
     overflow: hidden;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
 }
-.card-thumb-placeholder {
-    height: 155px;
+.ro-card.selected { border: 2px solid #1A73E8 !important; }
+.ro-card-img { width: 100%; display: block; object-fit: cover; height: 200px; }
+.ro-card-noimg {
+    height: 200px;
     background: #EBEBEB;
     display: flex;
     align-items: center;
@@ -93,105 +197,112 @@ st.markdown("""
     color: #C7C7CC;
     font-size: 13px;
 }
-.card-thumb img {
-    width: 100%;
-    height: 155px;
-    object-fit: cover;
-}
-.card-body { padding: 10px 12px 6px; }
-.card-brand {
-    font-size: 10px;
-    font-weight: 600;
-    color: #9A9A9F;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-}
-.card-name {
-    font-size: 14px;
-    font-weight: 700;
-    color: #1A1A1A;
-    margin: 3px 0 4px;
-    line-height: 1.3;
-}
-.card-meta  { font-size: 11px; color: #9A9A9F; margin-bottom: 2px; }
-.card-notes { font-size: 11px; color: #9A9A9F; margin-top: 4px; }
 
-/* ── Upcoming field card ─────────────────────────────────────── */
-.upcoming-card {
-    background: #FFFFFF;
+/* ── Catalog card ────────────────────────────────────────── */
+.cat-card {
+    background: white;
     border: 1px solid #DEDEDE;
     border-radius: 6px;
     overflow: hidden;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
 }
-.upcoming-field {
-    padding: 7px 10px;
-    border-bottom: 1px solid #DEDEDE;
-    font-size: 11px;
-    color: #9A9A9F;
+.cat-card-info {
+    padding: 8px;
     text-align: center;
-    background: #FFFFFF;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #1A1A1A;
+    border-bottom: 1px solid #DEDEDE;
+    line-height: 1.9;
 }
-.upcoming-field.has-value { color: #1A1A1A; }
-.upcoming-field.image-area {
-    height: 150px;
+.cat-card-img { width: 100%; height: 220px; object-fit: cover; display: block; }
+.cat-card-noimg {
+    height: 220px;
+    background: #EBEBEB;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-direction: column;
-    gap: 6px;
     color: #C7C7CC;
-    font-size: 12px;
-}
-.upcoming-field img {
-    width: 100%;
-    height: 150px;
-    object-fit: cover;
+    font-size: 13px;
 }
 
-/* ── Empty state ─────────────────────────────────────────────── */
-.empty-card {
-    background: #FFFFFF;
-    border: 1px solid #DEDEDE;
-    border-radius: 8px;
-    padding: 70px 40px;
-    text-align: center;
-}
-.empty-icon  { font-size: 42px; color: #C7C7CC; margin-bottom: 12px; }
-.empty-title { font-size: 15px; color: #9A9A9F; font-weight: 500; margin-bottom: 4px; }
-.empty-sub   { font-size: 13px; color: #C7C7CC; }
-
-/* Current Week empty (no card — just centered text on gray bg) */
-.empty-plain { text-align: center; color: #9A9A9F; font-size: 14px; padding: 80px 20px; }
-
-/* ── Primary button override ─────────────────────────────────── */
-div.stButton > button[kind="primary"] {
-    background-color: #111111;
-    color: #FFFFFF;
-    border: none;
+/* ── Buttons ─────────────────────────────────────────────── */
+div.stButton > button {
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    border: none !important;
+    padding: 4px 10px !important;
+}
+div.stButton > button[kind="primary"] {
+    background: #111111 !important;
+    color: white !important;
 }
 div.stButton > button[kind="secondary"] {
-    background-color: #E8E8E8;
-    color: #1A1A1A;
+    background: #E8E8E8 !important;
+    color: #111111 !important;
+}
+/* Circle add/remove buttons */
+button.circle-add, button.circle-remove {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    font-size: 22px;
+    font-weight: 700;
     border: none;
-    border-radius: 4px;
-    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
 }
-div.stButton > button[kind="primary"]:hover  { background-color: #333333; }
-div.stButton > button[kind="secondary"]:hover { background-color: #D5D5D5; }
 
-/* ── Add-item button ─────────────────────────────────────────── */
-.add-btn-row { margin: 12px 0 20px; }
-
-/* ── Form styling ────────────────────────────────────────────── */
-div[data-testid="stForm"] {
-    background: #FFFFFF;
-    border: 1px solid #DEDEDE;
+/* ── Action bar (shown when cards selected) ──────────────── */
+.action-bar {
+    background: transparent;
+    padding: 12px 24px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+.action-bar-btn {
+    padding: 12px 28px;
     border-radius: 8px;
-    padding: 20px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
 }
+.action-bar-btn.black  { background: #111; color: white; }
+.action-bar-btn.red    { background: #E63946; color: white; }
+.action-bar-btn.blue   { background: #1A73E8; color: white; }
+
+/* ── Search bar ──────────────────────────────────────────── */
+div[data-testid="stTextInput"].search-wrapper > div {
+    border: 1px solid #DEDEDE !important;
+    border-radius: 24px !important;
+    border-bottom: 1px solid #DEDEDE !important;
+    background: white;
+}
+div[data-testid="stTextInput"].search-wrapper > div > div > input {
+    text-transform: none !important;
+    text-align: left !important;
+    font-size: 14px !important;
+    border-radius: 24px !important;
+    padding-left: 14px !important;
+}
+
+/* ── Content padding ─────────────────────────────────────── */
+.padded { padding: 0 24px; }
+
+/* ── Column gap fix ──────────────────────────────────────── */
+div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
+
+/* ── Streamlit image display ─────────────────────────────── */
+div[data-testid="stImage"] img {
+    border-top: 1px solid #DEDEDE;
+    border-bottom: 1px solid #DEDEDE;
+}
+div[data-testid="stImage"] { margin: 0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -203,7 +314,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
-
 SHEET_HEADERS = [
     "id", "brand", "candle_name", "season", "pvr",
     "scent_notes", "ops_notes", "image_url", "status",
@@ -223,439 +333,686 @@ def _get_services():
 
 def _sheet():
     gc, _ = _get_services()
-    sh = gc.open_by_key(st.secrets["sheet_id"])
-    ws = sh.sheet1
-    # Auto-create header row if the sheet is brand new
-    if ws.row_count == 0 or ws.acell("A1").value != "id":
-        ws.insert_row(SHEET_HEADERS, 1)
+    ws = gc.open_by_key(st.secrets["sheet_id"]).sheet1
+    if not ws.get_all_values():
+        ws.append_row(SHEET_HEADERS)
+    elif ws.row_values(1) != SHEET_HEADERS:
+        ws.update("A1", [SHEET_HEADERS])
     return ws
 
 
-# ─── Data access (cached for 4 seconds to avoid hammering the API)
-@st.cache_data(ttl=4)
+@st.cache_data(ttl=3)
 def load_items() -> list[dict]:
     try:
         return _sheet().get_all_records()
     except Exception as e:
-        st.error(f"⚠️ Could not load data from Google Sheets: {e}")
+        st.error(f"Could not load data: {e}")
         return []
 
 
-def _clear_cache():
+def _clear():
     load_items.clear()
 
 
-# ─── Write helpers
-def add_item(brand, candle_name, season, pvr, scent_notes, ops_notes, image_url=""):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    _sheet().append_row([
-        str(uuid.uuid4()), brand, candle_name, season, pvr,
-        scent_notes, ops_notes, image_url, "upcoming", now, now,
-    ])
-    _clear_cache()
+# ─────────────────────────────────────────────────────────────────
+#  DATA HELPERS
+# ─────────────────────────────────────────────────────────────────
+def add_item() -> str:
+    new_id = str(uuid.uuid4())
+    now    = datetime.now().strftime("%Y-%m-%d %H:%M")
+    _sheet().append_row([new_id, "", "", "", "", "", "", "", "upcoming", now, now])
+    _clear()
+    return new_id
 
 
-def set_status(item_id: str, new_status: str):
-    ws      = _sheet()
-    records = ws.get_all_records()
-    for i, rec in enumerate(records):
-        if str(rec["id"]) == str(item_id):
-            row = i + 2   # +1 for header, +1 for 1-indexing
-            ws.update_cell(row, 9,  new_status)
-            ws.update_cell(row, 11, datetime.now().strftime("%Y-%m-%d %H:%M"))
-            break
-    _clear_cache()
-
-
-def update_item(item_id: str, **fields):
-    ws      = _sheet()
-    records = ws.get_all_records()
-    col_map = {h: i + 1 for i, h in enumerate(SHEET_HEADERS)}
-    for i, rec in enumerate(records):
-        if str(rec["id"]) == str(item_id):
-            row = i + 2
-            for field, value in fields.items():
-                if field in col_map:
-                    ws.update_cell(row, col_map[field], value)
-            ws.update_cell(row, col_map["updated_at"],
+def save_field(item_id: str, field: str, raw_value: str):
+    value = raw_value.upper().strip()
+    ws    = _sheet()
+    recs  = ws.get_all_records()
+    col   = SHEET_HEADERS.index(field) + 1
+    for i, r in enumerate(recs):
+        if str(r["id"]) == str(item_id):
+            ws.update_cell(i + 2, col, value)
+            ws.update_cell(i + 2, SHEET_HEADERS.index("updated_at") + 1,
                            datetime.now().strftime("%Y-%m-%d %H:%M"))
             break
-    _clear_cache()
+    _clear()
+
+
+def set_status(item_id: str, status: str):
+    ws   = _sheet()
+    recs = ws.get_all_records()
+    for i, r in enumerate(recs):
+        if str(r["id"]) == str(item_id):
+            ws.update_cell(i + 2, SHEET_HEADERS.index("status") + 1, status)
+            ws.update_cell(i + 2, SHEET_HEADERS.index("updated_at") + 1,
+                           datetime.now().strftime("%Y-%m-%d %H:%M"))
+            break
+    _clear()
+
+
+def set_status_many(ids: list[str], status: str):
+    ws   = _sheet()
+    recs = ws.get_all_records()
+    id_set = set(str(i) for i in ids)
+    now  = datetime.now().strftime("%Y-%m-%d %H:%M")
+    s_col = SHEET_HEADERS.index("status") + 1
+    u_col = SHEET_HEADERS.index("updated_at") + 1
+    for i, r in enumerate(recs):
+        if str(r["id"]) in id_set:
+            ws.update_cell(i + 2, s_col, status)
+            ws.update_cell(i + 2, u_col, now)
+    _clear()
+
+
+def copy_to_reshoot(item: dict):
+    """Create an independent copy of a catalog item in the reshoot queue."""
+    now    = datetime.now().strftime("%Y-%m-%d %H:%M")
+    new_id = str(uuid.uuid4())
+    _sheet().append_row([
+        new_id,
+        item.get("brand", ""),
+        item.get("candle_name", ""),
+        item.get("season", ""),
+        item.get("pvr", ""),
+        item.get("scent_notes", ""),
+        item.get("ops_notes", ""),
+        item.get("image_url", ""),
+        "reshoot",
+        now, now,
+    ])
+    _clear()
+    return new_id
 
 
 def delete_item(item_id: str):
-    ws      = _sheet()
-    records = ws.get_all_records()
-    for i, rec in enumerate(records):
-        if str(rec["id"]) == str(item_id):
+    ws   = _sheet()
+    recs = ws.get_all_records()
+    for i, r in enumerate(recs):
+        if str(r["id"]) == str(item_id):
             ws.delete_rows(i + 2)
             break
-    _clear_cache()
+    _clear()
 
 
-def upload_image(file_bytes: bytes, filename: str, mime_type: str) -> str:
-    """Upload to Google Drive and return a publicly viewable URL."""
+def remove_last_empty():
+    """Remove the most recently added item that has no data filled in."""
+    items = load_items()
+    upcoming = [i for i in items if i.get("status") == "upcoming"]
+    for item in reversed(upcoming):
+        fields = ["brand","candle_name","season","pvr","scent_notes","ops_notes","image_url"]
+        if not any(item.get(f,"").strip() for f in fields):
+            delete_item(item["id"])
+            return
+
+
+def upload_image(file_bytes: bytes, filename: str, mime: str) -> str:
     _, drive = _get_services()
-    folder_id = st.secrets["drive_folder_id"]
-
-    media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type)
+    folder   = st.secrets["drive_folder_id"]
+    media    = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime)
     f = drive.files().create(
-        body={"name": filename, "parents": [folder_id]},
-        media_body=media,
-        fields="id",
+        body={"name": filename, "parents": [folder]},
+        media_body=media, fields="id"
     ).execute()
-
     fid = f["id"]
     drive.permissions().create(
         fileId=fid, body={"type": "anyone", "role": "reader"}
     ).execute()
-
     return f"https://drive.google.com/uc?export=view&id={fid}"
 
 
+def send_slack(message: str):
+    """Send a message to the configured Slack webhook (optional)."""
+    try:
+        webhook = st.secrets.get("slack_webhook_url", "")
+        if webhook:
+            requests.post(webhook, json={"text": message}, timeout=5)
+    except Exception:
+        pass  # Slack is optional — never block the app
+
+
 # ─────────────────────────────────────────────────────────────────
-#  SESSION STATE DEFAULTS
+#  SESSION STATE
 # ─────────────────────────────────────────────────────────────────
-def _init_state():
-    defaults = {
-        "show_add_form":    False,
-        "editing_item_id":  None,
-        "confirm_delete_id": None,
-    }
-    for k, v in defaults.items():
+def _init():
+    for k, v in {
+        "sel_cw":      set(),
+        "sel_reshoot": set(),
+    }.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
-_init_state()
+_init()
 
 
 # ─────────────────────────────────────────────────────────────────
-#  REUSABLE COMPONENTS
+#  HELPERS
 # ─────────────────────────────────────────────────────────────────
-def _thumb_html(image_url: str, height: int = 155) -> str:
-    if image_url:
-        return f'<img src="{image_url}" style="width:100%;height:{height}px;object-fit:cover;">'
-    return (f'<div style="height:{height}px;background:#EBEBEB;display:flex;'
-            f'align-items:center;justify-content:center;color:#C7C7CC;font-size:13px;">'
-            f'No image</div>')
+def _fval(item: dict, field: str) -> str:
+    return str(item.get(field, "") or "").upper().strip()
 
 
-def _upcoming_card_html(item: dict) -> str:
-    def row(label, field, is_image=False):
-        val = item.get(field, "")
-        if is_image:
-            if val:
-                return (f'<div style="border-bottom:1px solid #DEDEDE;">'
-                        f'<img src="{val}" style="width:100%;height:150px;object-fit:cover;display:block;"></div>')
-            return ('<div style="height:150px;border-bottom:1px solid #DEDEDE;'
-                    'display:flex;align-items:center;justify-content:center;'
-                    'flex-direction:column;gap:4px;color:#C7C7CC;font-size:12px;">'
-                    '🖼<br>No image yet</div>')
-        color = "#1A1A1A" if val else "#C7C7CC"
-        display = val if val else label
-        return (f'<div style="padding:7px 10px;border-bottom:1px solid #DEDEDE;'
-                f'font-size:11px;color:{color};text-align:center;">{display}</div>')
-
-    return (
-        '<div style="background:#FFF;border:1px solid #DEDEDE;border-radius:6px;overflow:hidden;">'
-        + row("BRAND/COLLECTION", "brand")
-        + row("CANDLE NAME",       "candle_name")
-        + row("SEASON",            "season")
-        + row("PVR",               "pvr")
-        + row("",                  "image_url", is_image=True)
-        + row("SCENT NOTES",       "scent_notes")
-        + row("OPS NOTES",         "ops_notes")
-        + '</div>'
-    )
+def _img(item: dict) -> str:
+    return item.get("image_url", "") or ""
 
 
-def _display_card_html(item: dict) -> str:
-    brand = item.get("brand", "")
-    name  = item.get("candle_name", "")
-    meta  = "  ·  ".join(v for v in [item.get("season",""), item.get("pvr","")] if v)
-    scent = item.get("scent_notes", "")
-    ops   = item.get("ops_notes", "")
-
-    body = ""
-    if brand: body += f'<div class="card-brand">{brand}</div>'
-    if name:  body += f'<div class="card-name">{name}</div>'
-    if meta:  body += f'<div class="card-meta">{meta}</div>'
-    if scent: body += f'<div class="card-notes">🌸 {scent}</div>'
-    if ops:   body += f'<div class="card-notes">📋 {ops}</div>'
-
-    return (
-        '<div class="item-card">'
-        + _thumb_html(item.get("image_url", ""))
-        + f'<div class="card-body">{body}</div>'
-        + '</div>'
-    )
+def _ro_field(value: str, placeholder: str) -> str:
+    """Return HTML for a read-only field row."""
+    if value:
+        return f'<div class="ro-field">{value}</div>'
+    return f'<div class="ro-field placeholder">{placeholder}</div>'
 
 
-# ─────────────────────────────────────────────────────────────────
-#  ADD / EDIT FORM
-# ─────────────────────────────────────────────────────────────────
-def _item_form(title: str, defaults: dict = None, form_key: str = "item_form"):
-    """
-    Renders an add/edit form.
-    Returns (submitted, cancelled, form_data_dict).
-    """
-    d = defaults or {}
-    submitted = cancelled = False
-    data = {}
-
-    with st.form(form_key, clear_on_submit=True):
-        st.markdown(f"**{title}**")
-        c1, c2 = st.columns(2)
-        with c1:
-            data["brand"]       = st.text_input("Brand / Collection", value=d.get("brand",""))
-            data["season"]      = st.text_input("Season",             value=d.get("season",""))
-            data["scent_notes"] = st.text_input("Scent Notes",        value=d.get("scent_notes",""))
-        with c2:
-            data["candle_name"] = st.text_input("Candle Name",        value=d.get("candle_name",""))
-            data["pvr"]         = st.text_input("PVR",                value=d.get("pvr",""))
-            data["ops_notes"]   = st.text_input("Ops Notes",          value=d.get("ops_notes",""))
-
-        img_file = st.file_uploader(
-            "Product image (optional)",
-            type=["png","jpg","jpeg","webp","gif"],
-            key=f"{form_key}_img",
-        )
-        data["_img_file"] = img_file
-
-        cols = st.columns([1, 1, 4])
-        with cols[0]:
-            submitted = st.form_submit_button("Save", type="primary")
-        with cols[1]:
-            cancelled = st.form_submit_button("Cancel", type="secondary")
-
-    return submitted, cancelled, data
+def _full_word_search(items: list[dict], query: str) -> list[dict]:
+    """Return items where ALL space-separated query tokens appear as full words
+    in at least one of the item's text fields."""
+    if not query.strip():
+        return items
+    tokens = query.strip().split()
+    searchable = ["brand", "candle_name", "season", "pvr", "scent_notes", "ops_notes"]
+    results = []
+    for item in items:
+        haystack = " ".join(str(item.get(f, "") or "") for f in searchable).upper()
+        if all(re.search(r'\b' + re.escape(t.upper()) + r'\b', haystack) for t in tokens):
+            results.append(item)
+    return results
 
 
 # ─────────────────────────────────────────────────────────────────
 #  PAGE: UPCOMING IN STUDIO
 # ─────────────────────────────────────────────────────────────────
-def page_upcoming(items: list[dict]):
-    st.markdown('<div class="page-title">UPCOMING IN STUDIO</div>',
+def page_upcoming():
+    st.markdown('<div class="page-title">⏱ UPCOMING IN STUDIO</div>',
                 unsafe_allow_html=True)
 
+    items    = load_items()
     upcoming = [i for i in items if i.get("status") == "upcoming"]
 
-    # ── Add form ──────────────────────────────────────────────────
-    if st.session_state.show_add_form:
-        submitted, cancelled, data = _item_form("New Item", form_key="add_form")
+    st.markdown('<div class="padded">', unsafe_allow_html=True)
 
-        if cancelled:
-            st.session_state.show_add_form = False
-            st.rerun()
+    COLS = 4
+    # We'll render cards + the +/- buttons in the same row grid
+    total_slots = len(upcoming) + 1  # +1 for the +/- control slot
+    n_rows = max(1, -(-total_slots // COLS))  # ceiling division
 
-        if submitted:
-            image_url = ""
-            if data["_img_file"]:
-                with st.spinner("Uploading image…"):
-                    image_url = upload_image(
-                        data["_img_file"].read(),
-                        data["_img_file"].name,
-                        data["_img_file"].type,
+    slot = 0
+    for row in range(n_rows):
+        cols = st.columns(COLS, gap="small")
+        for col_idx in range(COLS):
+            if slot < len(upcoming):
+                item = upcoming[slot]
+                with cols[col_idx]:
+                    _upcoming_card(item)
+                slot += 1
+            elif slot == len(upcoming):
+                # +/- buttons slot
+                with cols[col_idx]:
+                    st.markdown("<div style='padding-top:6px'>", unsafe_allow_html=True)
+                    if st.button("＋", key="add_card", type="primary",
+                                 help="Add new product slot"):
+                        add_item()
+                        st.rerun()
+                    st.markdown(
+                        '<div style="margin-top:8px">',
+                        unsafe_allow_html=True
                     )
-            add_item(
-                data["brand"], data["candle_name"], data["season"],
-                data["pvr"], data["scent_notes"], data["ops_notes"],
-                image_url,
-            )
-            st.session_state.show_add_form = False
-            st.rerun()
-
-    # ── Edit form ─────────────────────────────────────────────────
-    elif st.session_state.editing_item_id:
-        edit_item = next(
-            (i for i in upcoming
-             if str(i["id"]) == str(st.session_state.editing_item_id)),
-            None,
-        )
-        if edit_item:
-            submitted, cancelled, data = _item_form(
-                "Edit Item", defaults=edit_item, form_key="edit_form"
-            )
-            if cancelled:
-                st.session_state.editing_item_id = None
-                st.rerun()
-            if submitted:
-                fields = {k: v for k, v in data.items() if k != "_img_file"}
-                if data["_img_file"]:
-                    with st.spinner("Uploading image…"):
-                        fields["image_url"] = upload_image(
-                            data["_img_file"].read(),
-                            data["_img_file"].name,
-                            data["_img_file"].type,
-                        )
-                update_item(edit_item["id"], **fields)
-                st.session_state.editing_item_id = None
-                st.rerun()
-
-    # ── Card grid + add button ────────────────────────────────────
-    else:
-        btn_col, _ = st.columns([1, 5])
-        with btn_col:
-            if st.button("＋  Add New Item", type="primary", use_container_width=True):
-                st.session_state.show_add_form = True
-                st.rerun()
-
-        if not upcoming:
-            st.markdown(
-                '<div class="empty-plain">No upcoming items yet. '
-                'Click <strong>+ Add New Item</strong> to get started.</div>',
-                unsafe_allow_html=True,
-            )
-            return
-
-        cols = st.columns(4)
-        for idx, item in enumerate(upcoming):
-            with cols[idx % 4]:
-                st.markdown(_upcoming_card_html(item), unsafe_allow_html=True)
-
-                # Action buttons
-                b1, b2, b3 = st.columns([3, 2, 1])
-                with b1:
-                    if st.button("→ Current Week",
-                                 key=f"up_cw_{item['id']}", type="primary",
-                                 use_container_width=True):
-                        set_status(item["id"], "current_week")
+                    if st.button("－", key="rem_card",
+                                 help="Remove last empty slot"):
+                        remove_last_empty()
                         st.rerun()
-                with b2:
-                    if st.button("✏ Edit",
-                                 key=f"up_ed_{item['id']}", type="secondary",
-                                 use_container_width=True):
-                        st.session_state.editing_item_id = item["id"]
-                        st.rerun()
-                with b3:
-                    if st.button("✕",
-                                 key=f"up_del_{item['id']}", type="secondary",
-                                 use_container_width=True):
-                        st.session_state.confirm_delete_id = item["id"]
-                        st.rerun()
+                    st.markdown("</div></div>", unsafe_allow_html=True)
+                slot += 1
+        if slot > len(upcoming):
+            break
 
-        # ── Delete confirmation
-        if st.session_state.confirm_delete_id:
-            st.warning("Are you sure you want to delete this item?")
-            y, n, _ = st.columns([1, 1, 4])
-            with y:
-                if st.button("Yes, delete", type="primary"):
-                    delete_item(st.session_state.confirm_delete_id)
-                    st.session_state.confirm_delete_id = None
-                    st.rerun()
-            with n:
-                if st.button("Cancel", type="secondary"):
-                    st.session_state.confirm_delete_id = None
-                    st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
-# ─────────────────────────────────────────────────────────────────
-#  GENERIC GRID PAGE  (Current Week / Catalog / Reshoot)
-# ─────────────────────────────────────────────────────────────────
-def page_grid(
-    items:       list[dict],
-    status:      str,
-    title:       str,
-    empty_icon:  str,
-    empty_title: str,
-    empty_sub:   str,
-    actions:     list[tuple],   # (label, new_status, is_primary)
-    plain_empty: bool = False,
-):
-    st.markdown(f'<div class="page-title">{title}</div>', unsafe_allow_html=True)
+def _upcoming_card(item: dict):
+    iid = str(item["id"])
 
-    filtered = [i for i in items if i.get("status") == status]
+    with st.container(border=True):
+        # ── Text fields (auto-save on change) ───────────────
+        for field, ph in [
+            ("brand",       "BRAND/COLLECTION"),
+            ("candle_name", "CANDLE NAME"),
+            ("season",      "SEASON"),
+            ("pvr",         "PVR"),
+        ]:
+            key = f"up_{iid}_{field}"
+            val = _fval(item, field)
+            def _save(f=field, k=key, i=iid):
+                v = st.session_state.get(k, "")
+                if v and v.upper() != _fval(item, f):
+                    save_field(i, f, v)
+            st.text_input(ph, value=val, key=key,
+                          on_change=_save,
+                          placeholder=ph,
+                          label_visibility="collapsed")
 
-    if not filtered:
-        if plain_empty:
-            st.markdown(
-                f'<div class="empty-plain">{empty_title}</div>',
-                unsafe_allow_html=True,
+        # ── Image ────────────────────────────────────────────
+        img_url = _img(item)
+        if img_url:
+            st.image(img_url, use_container_width=True)
+            # Replace image button
+            new_img = st.file_uploader(
+                "Replace image", type=["png","jpg","jpeg","webp","gif"],
+                key=f"up_img_{iid}", label_visibility="collapsed"
             )
+            if new_img:
+                with st.spinner("Uploading…"):
+                    url = upload_image(new_img.read(), new_img.name, new_img.type)
+                    save_field(iid, "image_url", url)
+                st.rerun()
         else:
-            st.markdown(f"""
-            <div class="empty-card">
-                <div class="empty-icon">{empty_icon}</div>
-                <div class="empty-title">{empty_title}</div>
-                <div class="empty-sub">{empty_sub}</div>
-            </div>""", unsafe_allow_html=True)
+            new_img = st.file_uploader(
+                "Click or paste image", type=["png","jpg","jpeg","webp","gif"],
+                key=f"up_img_{iid}", label_visibility="collapsed"
+            )
+            if new_img:
+                with st.spinner("Uploading…"):
+                    url = upload_image(new_img.read(), new_img.name, new_img.type)
+                    save_field(iid, "image_url", url)
+                st.rerun()
+
+        # ── Bottom fields ────────────────────────────────────
+        for field, ph in [
+            ("scent_notes", "SCENT NOTES"),
+            ("ops_notes",   "OPS NOTES"),
+        ]:
+            key = f"up_{iid}_{field}"
+            val = _fval(item, field)
+            def _save2(f=field, k=key, i=iid):
+                v = st.session_state.get(k, "")
+                if v and v.upper() != _fval(item, f):
+                    save_field(i, f, v)
+            st.text_input(ph, value=val, key=key,
+                          on_change=_save2,
+                          placeholder=ph,
+                          label_visibility="collapsed")
+
+        # ── Action buttons ───────────────────────────────────
+        st.markdown(
+            '<div style="border-top:1px solid #DEDEDE;background:white;padding:6px 8px;">',
+            unsafe_allow_html=True
+        )
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            if st.button("→ CURRENT WEEK", key=f"up_adv_{iid}",
+                         type="primary", use_container_width=True):
+                # Save any pending session_state changes first
+                for f in ["brand","candle_name","season","pvr","scent_notes","ops_notes"]:
+                    k = f"up_{iid}_{f}"
+                    if k in st.session_state:
+                        save_field(iid, f, st.session_state[k])
+                set_status(iid, "current_week")
+                st.rerun()
+        with c2:
+            if st.button("🗑", key=f"up_del_{iid}",
+                         type="secondary", use_container_width=True,
+                         help="Delete this item"):
+                delete_item(iid)
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────
+#  PAGE: CURRENT WEEK
+# ─────────────────────────────────────────────────────────────────
+def page_current_week():
+    items = load_items()
+    cw    = [i for i in items if i.get("status") == "current_week"]
+
+    st.markdown('<div class="page-title">☐ CURRENT WEEK</div>',
+                unsafe_allow_html=True)
+
+    sel: set = st.session_state.sel_cw
+
+    # ── Action bar (when items selected) ─────────────────────
+    if sel:
+        st.markdown('<div class="padded action-bar">', unsafe_allow_html=True)
+        c1, c2, _ = st.columns([2, 2, 6])
+        with c1:
+            if st.button(f"MOVE TO CATALOG  ({len(sel)})",
+                         type="primary", use_container_width=True):
+                set_status_many(list(sel), "catalog")
+                st.session_state.sel_cw = set()
+                st.rerun()
+        with c2:
+            if st.button("CLEAR SELECTION", type="secondary",
+                         use_container_width=True):
+                st.session_state.sel_cw = set()
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if not cw:
+        st.markdown(
+            '<div style="text-align:center;color:#9A9A9F;font-size:14px;'
+            'padding:80px 20px;">No items yet. Add items from the '
+            '"Upcoming in Studio" tab.</div>',
+            unsafe_allow_html=True
+        )
         return
 
-    cols = st.columns(4)
+    st.markdown('<div class="padded">', unsafe_allow_html=True)
+    cols = st.columns(4, gap="small")
+    for idx, item in enumerate(cw):
+        with cols[idx % 4]:
+            _cw_card(item)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def _cw_card(item: dict):
+    iid      = str(item["id"])
+    selected = iid in st.session_state.sel_cw
+    border   = "2px solid #1A73E8" if selected else "1px solid #DEDEDE"
+
+    # Top info + image + bottom info rendered as HTML
+    fields_html = "".join(
+        _ro_field(_fval(item, f), ph)
+        for f, ph in [
+            ("brand",       "BRAND/COLLECTION"),
+            ("candle_name", "CANDLE NAME"),
+            ("season",      "SEASON"),
+            ("pvr",         "PVR"),
+        ]
+    )
+    img_html = (
+        f'<img class="ro-card-img" src="{_img(item)}">'
+        if _img(item)
+        else '<div class="ro-card-noimg">No image</div>'
+    )
+    bottom_html = "".join(
+        _ro_field(_fval(item, f), ph)
+        for f, ph in [
+            ("scent_notes", "SCENT NOTES"),
+            ("ops_notes",   "OPS NOTES"),
+        ]
+    )
+
+    st.markdown(
+        f'<div class="ro-card" style="border:{border};margin-bottom:4px;">'
+        f'{fields_html}{img_html}{bottom_html}</div>',
+        unsafe_allow_html=True
+    )
+
+    # ── Buttons ───────────────────────────────────────────────
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        label = "✓ SELECTED" if selected else "SELECT"
+        btn_t = "primary" if selected else "secondary"
+        if st.button(label, key=f"cw_sel_{iid}",
+                     type=btn_t, use_container_width=True):
+            if selected:
+                st.session_state.sel_cw.discard(iid)
+            else:
+                st.session_state.sel_cw.add(iid)
+            st.rerun()
+    with c2:
+        if st.button("← UPCOMING", key=f"cw_back_{iid}",
+                     type="secondary", use_container_width=True):
+            st.session_state.sel_cw.discard(iid)
+            set_status(iid, "upcoming")
+            st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────
+#  PAGE: HOME FRAGRANCE CATALOG
+# ─────────────────────────────────────────────────────────────────
+def page_catalog():
+    items   = load_items()
+    catalog = [i for i in items if i.get("status") == "catalog"]
+    # Most recent first
+    catalog.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+
+    st.markdown('<div class="page-title">≡ HOME FRAGRANCE CATALOG</div>',
+                unsafe_allow_html=True)
+    st.markdown('<div class="padded">', unsafe_allow_html=True)
+
+    # ── Search bar ────────────────────────────────────────────
+    query = st.text_input(
+        "Search",
+        placeholder="🔍  Search library…",
+        key="cat_search",
+        label_visibility="collapsed"
+    )
+
+    filtered = _full_word_search(catalog, query)
+
+    if not filtered:
+        if query:
+            st.markdown(
+                f'<div style="color:#9A9A9F;font-size:14px;padding:40px 0;">'
+                f'No results for "{query}".</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown("""
+            <div style="background:white;border:1px solid #DEDEDE;border-radius:8px;
+                        padding:70px;text-align:center;">
+                <div style="font-size:36px;color:#C7C7CC;margin-bottom:12px;">≡</div>
+                <div style="font-size:15px;color:#9A9A9F;">No archived items yet</div>
+                <div style="font-size:13px;color:#C7C7CC;margin-top:4px;">
+                    Items moved from Current Week will appear here</div>
+            </div>""", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+
+    cols = st.columns(4, gap="small")
     for idx, item in enumerate(filtered):
         with cols[idx % 4]:
-            st.markdown(_display_card_html(item), unsafe_allow_html=True)
+            _catalog_card(item)
 
-            btn_cols = st.columns(len(actions))
-            for ci, (label, new_status, is_primary) in enumerate(actions):
-                with btn_cols[ci]:
-                    btn_type = "primary" if is_primary else "secondary"
-                    if st.button(label,
-                                 key=f"{status}_{new_status}_{item['id']}",
-                                 type=btn_type,
-                                 use_container_width=True):
-                        set_status(item["id"], new_status)
-                        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def _catalog_card(item: dict):
+    iid = str(item["id"])
+
+    # Info text (no bottom text in catalog)
+    info_lines = [
+        _fval(item, f) or ph
+        for f, ph in [
+            ("brand",       "BRAND/COLLECTION"),
+            ("candle_name", "CANDLE NAME"),
+            ("season",      "SEASON"),
+            ("pvr",         "PVR"),
+        ]
+    ]
+    info_html = "<br>".join(
+        f'<span style="color:{"#1A1A1A" if _fval(item,f) else "#C7C7CC"}">{v}</span>'
+        for v, (f, _) in zip(info_lines, [
+            ("brand",""), ("candle_name",""), ("season",""), ("pvr","")
+        ])
+    )
+
+    img_html = (
+        f'<img class="cat-card-img" src="{_img(item)}">'
+        if _img(item)
+        else '<div class="cat-card-noimg">No image</div>'
+    )
+
+    st.markdown(
+        f'<div class="cat-card">'
+        f'<div class="cat-card-info">{info_html}</div>'
+        f'{img_html}</div>',
+        unsafe_allow_html=True
+    )
+
+    # ── Image upload (replace) ────────────────────────────────
+    new_img = st.file_uploader(
+        "Replace image",
+        type=["png","jpg","jpeg","webp","gif"],
+        key=f"cat_img_{iid}",
+        label_visibility="collapsed"
+    )
+    if new_img:
+        with st.spinner("Uploading…"):
+            url = upload_image(new_img.read(), new_img.name, new_img.type)
+            save_field(iid, "image_url", url)
+        st.rerun()
+
+    # ── Action buttons ────────────────────────────────────────
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        if st.button("♻ RESHOOT", key=f"cat_re_{iid}",
+                     type="primary", use_container_width=True):
+            new_id = copy_to_reshoot(item)
+            send_slack(
+                f"🔁 *Reshoot requested*\n"
+                f"*{_fval(item,'candle_name') or 'Unnamed'}*"
+                f" — {_fval(item,'brand') or ''}"
+                f" ({_fval(item,'season') or ''})"
+            )
+            st.success("Copied to Reshoot Requests!")
+            st.rerun()
+    with c2:
+        if st.button("🗑 DELETE", key=f"cat_del_{iid}",
+                     type="secondary", use_container_width=True):
+            delete_item(iid)
+            st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────
+#  PAGE: RESHOOT REQUESTS
+# ─────────────────────────────────────────────────────────────────
+def page_reshoot():
+    items   = load_items()
+    reshoot = [i for i in items if i.get("status") == "reshoot"]
+
+    st.markdown('<div class="page-title">↺ RESHOOT REQUESTS</div>',
+                unsafe_allow_html=True)
+
+    sel: set = st.session_state.sel_reshoot
+
+    # ── Action bar (when items selected) ─────────────────────
+    if sel:
+        st.markdown('<div class="padded action-bar">', unsafe_allow_html=True)
+        c1, c2, c3, _ = st.columns([2, 2, 2, 4])
+        with c1:
+            if st.button(f"MOVE TO UPCOMING  ({len(sel)})",
+                         type="primary", use_container_width=True):
+                sel_items = [i for i in reshoot if str(i["id"]) in sel]
+                set_status_many(list(sel), "upcoming")
+                for item in sel_items:
+                    send_slack(
+                        f"✅ *Reshoot accepted → Upcoming*\n"
+                        f"*{_fval(item,'candle_name') or 'Unnamed'}*"
+                        f" — {_fval(item,'brand') or ''}"
+                    )
+                st.session_state.sel_reshoot = set()
+                st.rerun()
+        with c2:
+            if st.button(f"DECLINE  ({len(sel)})",
+                         type="secondary", use_container_width=True):
+                sel_items = [i for i in reshoot if str(i["id"]) in sel]
+                for item in sel_items:
+                    delete_item(str(item["id"]))
+                    send_slack(
+                        f"❌ *Reshoot declined*\n"
+                        f"*{_fval(item,'candle_name') or 'Unnamed'}*"
+                        f" — {_fval(item,'brand') or ''}"
+                    )
+                st.session_state.sel_reshoot = set()
+                st.rerun()
+        with c3:
+            if st.button("CLEAR SELECTION", type="secondary",
+                         use_container_width=True):
+                st.session_state.sel_reshoot = set()
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if not reshoot:
+        st.markdown("""
+        <div style="background:white;border:1px solid #DEDEDE;border-radius:8px;
+                    margin:0 24px;padding:70px;text-align:center;">
+            <div style="font-size:36px;color:#C7C7CC;margin-bottom:12px;">↺</div>
+            <div style="font-size:15px;color:#9A9A9F;">No items marked for reshoots</div>
+            <div style="font-size:13px;color:#C7C7CC;margin-top:4px;">
+                Items recycled from the catalog will appear here</div>
+        </div>""", unsafe_allow_html=True)
+        return
+
+    st.markdown('<div class="padded">', unsafe_allow_html=True)
+    cols = st.columns(4, gap="small")
+    for idx, item in enumerate(reshoot):
+        with cols[idx % 4]:
+            _reshoot_card(item)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def _reshoot_card(item: dict):
+    iid      = str(item["id"])
+    selected = iid in st.session_state.sel_reshoot
+    border   = "2px solid #1A73E8" if selected else "1px solid #DEDEDE"
+
+    # Top fields (read-only)
+    fields_html = "".join(
+        _ro_field(_fval(item, f), ph)
+        for f, ph in [
+            ("brand",       "BRAND/COLLECTION"),
+            ("candle_name", "CANDLE NAME"),
+            ("season",      "SEASON"),
+            ("pvr",         "PVR"),
+        ]
+    )
+    # Image (not editable)
+    img_html = (
+        f'<img class="ro-card-img" src="{_img(item)}">'
+        if _img(item)
+        else '<div class="ro-card-noimg">No image</div>'
+    )
+    # Scent notes (read-only)
+    scent_html = _ro_field(_fval(item, "scent_notes"), "SCENT NOTES")
+
+    st.markdown(
+        f'<div class="ro-card" style="border:{border};margin-bottom:4px;">'
+        f'{fields_html}{img_html}{scent_html}</div>',
+        unsafe_allow_html=True
+    )
+
+    # ── Ops Notes (EDITABLE) ──────────────────────────────────
+    key_ops = f"re_ops_{iid}"
+    def _save_ops(k=key_ops, i=iid):
+        v = st.session_state.get(k, "")
+        save_field(i, "ops_notes", v)
+
+    with st.container(border=True):
+        st.text_input(
+            "OPS NOTES",
+            value=_fval(item, "ops_notes"),
+            key=key_ops,
+            on_change=_save_ops,
+            placeholder="OPS NOTES",
+            label_visibility="collapsed"
+        )
+
+    # ── Select button ─────────────────────────────────────────
+    label = "✓ SELECTED" if selected else "SELECT"
+    btn_t = "primary" if selected else "secondary"
+    if st.button(label, key=f"re_sel_{iid}",
+                 type=btn_t, use_container_width=True):
+        if selected:
+            st.session_state.sel_reshoot.discard(iid)
+        else:
+            st.session_state.sel_reshoot.add(iid)
+        st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────────────────────────
 def main():
-    items = load_items()
-
     tab1, tab2, tab3, tab4 = st.tabs([
         "⏱  Upcoming in Studio",
         "☐  Current Week",
         "≡  Home Fragrance Catalog",
         "↺  Reshoot Requests",
     ])
-
-    with tab1:
-        page_upcoming(items)
-
-    with tab2:
-        page_grid(
-            items,
-            status      = "current_week",
-            title       = "CURRENT WEEK",
-            empty_icon  = "",
-            empty_title = 'No items yet. Add items from the "Upcoming in Studio" tab.',
-            empty_sub   = "",
-            actions     = [
-                ("→ Archive to Catalog", "catalog",  True),
-                ("← Back to Upcoming",  "upcoming", False),
-            ],
-            plain_empty = True,
-        )
-
-    with tab3:
-        page_grid(
-            items,
-            status      = "catalog",
-            title       = "HOME FRAGRANCE CATALOG",
-            empty_icon  = "≡",
-            empty_title = "No archived items yet",
-            empty_sub   = "Items moved from Current Week will appear here",
-            actions     = [
-                ("↺ Mark for Reshoot",  "reshoot",      True),
-                ("← Back to Current",   "current_week", False),
-            ],
-        )
-
-    with tab4:
-        page_grid(
-            items,
-            status      = "reshoot",
-            title       = "RESHOOT REQUESTS",
-            empty_icon  = "↺",
-            empty_title = "No items marked for reshoots",
-            empty_sub   = "Items recycled from the catalog will appear here",
-            actions     = [
-                ("→ Back to Upcoming", "upcoming", True),
-                ("→ Re-archive",       "catalog",  False),
-            ],
-        )
+    with tab1: page_upcoming()
+    with tab2: page_current_week()
+    with tab3: page_catalog()
+    with tab4: page_reshoot()
 
 
 if __name__ == "__main__":
