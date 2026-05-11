@@ -1,5 +1,5 @@
 """
-Home Fragrance AutoPack — Streamlit Web App v3
+Home Fragrance AutoPack — Streamlit Web App v4
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 See secrets_template.toml for required credentials.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -22,7 +22,7 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────────
-#  STYLES + GLOBAL JS
+#  STYLES
 # ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -72,10 +72,15 @@ div[data-testid="stTabs"] > div:first-child { margin-bottom: 0 !important; }
     font-weight: 900;
     color: #1A1A1A;
     letter-spacing: -0.5px;
-    padding: 20px 24px 4px;
+    padding: 20px 24px 0;
 }
 
-/* ── ALL CAPS on every text input & textarea ─────────────── */
+/* ── Card grid area — margins + top gap from title ───────── */
+.padded {
+    padding: 16px 24px 24px;
+}
+
+/* ── ALL CAPS on text inputs / textareas ─────────────────── */
 input[type="text"], textarea {
     text-transform: uppercase !important;
     text-align: center !important;
@@ -83,11 +88,11 @@ input[type="text"], textarea {
     letter-spacing: 0.3px !important;
 }
 
-/* ── Remove labels from inputs ───────────────────────────── */
-div.stTextInput  > label { display: none !important; }
-div.stTextArea   > label { display: none !important; }
+/* ── Remove labels ───────────────────────────────────────── */
+div.stTextInput > label { display: none !important; }
+div.stTextArea  > label { display: none !important; }
 
-/* ── Input field styling (bordered rows in cards) ────────── */
+/* ── Compact input rows inside upcoming cards ────────────── */
 div.stTextInput > div {
     border: none !important;
     border-bottom: 1px solid #DEDEDE !important;
@@ -108,7 +113,7 @@ div.stTextInput > div:focus-within {
     box-shadow: none !important;
 }
 
-/* ── Upcoming card container: zero gap between stacked inputs */
+/* ── Upcoming card container: zero gap between widgets ───── */
 div[data-testid="stVerticalBlockBorderWrapper"] {
     background: white !important;
     border: 1px solid #DEDEDE !important;
@@ -120,20 +125,18 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
     padding: 0 !important;
     gap: 0 !important;
 }
-div[data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-}
+div[data-testid="stVerticalBlock"] { gap: 0 !important; }
 div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
     margin: 0 !important;
     padding: 0 !important;
 }
-/* Remove any extra spacing Streamlit adds between widgets */
-div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock"] > * {
+div[data-testid="stVerticalBlockBorderWrapper"]
+    div[data-testid="stVerticalBlock"] > * {
     margin-bottom: 0 !important;
     margin-top: 0 !important;
 }
 
-/* ── Read-only field rows (HTML divs) ────────────────────── */
+/* ── Read-only text rows ─────────────────────────────────── */
 .ro-field {
     background: white;
     border-bottom: 1px solid #DEDEDE;
@@ -144,10 +147,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock
     color: #1A1A1A;
     letter-spacing: 0.3px;
     min-height: 32px;
+    box-sizing: border-box;
 }
 .ro-field.placeholder { color: #C7C7CC; }
 
-/* ── Clickable card (CW + Reshoot) ──────────────────────── */
+/* ── Clickable cards (CW + Reshoot) ──────────────────────── */
 .ap-card {
     background: white;
     border: 1px solid #DEDEDE;
@@ -155,65 +159,76 @@ div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock
     overflow: hidden;
     margin-bottom: 8px;
     cursor: pointer;
-    transition: border-color 0.15s;
     user-select: none;
+    transition: box-shadow 0.15s;
 }
-.ap-card:hover { border-color: #ABABAB; }
-.ap-card.selected { border: 2px solid #1A73E8 !important; }
-.ap-card.selected:hover { border-color: #1A73E8; }
+.ap-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.10); }
+.ap-card.selected {
+    border: 2px solid #1A73E8 !important;
+    box-shadow: 0 0 0 2px rgba(26,115,232,0.15);
+}
 
-/* ── Image wrapper with hover overlay ───────────────────── */
-.img-wrap {
+/* ── Image area (3:4 ratio) ──────────────────────────────── */
+.img-area {
     position: relative;
-    overflow: hidden;
-}
-.img-wrap img {
     width: 100%;
-    height: 200px;
+    aspect-ratio: 3 / 4;
+    overflow: hidden;
+    background: #EBEBEB;
+}
+.img-area img {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
     display: block;
 }
-.img-wrap .noimg {
-    height: 200px;
-    background: #EBEBEB;
+.img-placeholder {
+    width: 100%;
+    height: 100%;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     color: #C7C7CC;
-    font-size: 13px;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    gap: 8px;
 }
-.img-wrap .hover-overlay {
+.img-placeholder svg { opacity: 0.4; }
+
+/* ── Hover overlay (action buttons on image) ─────────────── */
+.img-overlay {
     position: absolute;
     top: 0; left: 0; right: 0; bottom: 0;
     opacity: 0;
-    transition: opacity 0.2s;
+    transition: opacity 0.18s;
     pointer-events: none;
 }
-.img-wrap:hover .hover-overlay {
+.img-area:hover .img-overlay {
     opacity: 1;
     pointer-events: auto;
 }
-.hover-btn {
+/* Colored circle buttons */
+.hbtn {
     position: absolute;
-    cursor: pointer;
-    background: rgba(0,0,0,0.55);
-    color: white;
-    border: none;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
+    border: none;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s;
-    line-height: 1;
-    padding: 0;
+    font-size: 17px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    transition: transform 0.1s, filter 0.1s;
 }
-.hover-btn:hover { background: rgba(0,0,0,0.82); }
-.hover-btn-tl { top: 8px; left: 8px; }
-.hover-btn-tr { top: 8px; right: 8px; }
-.hover-btn-tr2 { top: 8px; right: 48px; }
+.hbtn:hover { transform: scale(1.08); filter: brightness(1.1); }
+.hbtn-tl  { top: 10px; left: 10px;  background: #111111; color: white; }
+.hbtn-tr  { top: 10px; right: 10px; background: #E63946; color: white; }
+.hbtn-tr2 { top: 10px; right: 56px; background: #1A73E8; color: white; }
 
 /* ── Catalog card ────────────────────────────────────────── */
 .cat-card {
@@ -232,53 +247,24 @@ div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock
     border-bottom: 1px solid #DEDEDE;
     line-height: 1.9;
 }
-.cat-img-wrap {
-    position: relative;
-    overflow: hidden;
-}
-.cat-img-wrap img {
-    width: 100%;
-    height: 220px;
-    object-fit: cover;
-    display: block;
-}
-.cat-img-wrap .noimg {
-    height: 220px;
-    background: #EBEBEB;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #C7C7CC;
-    font-size: 13px;
-}
-.cat-img-wrap .hover-overlay {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    opacity: 0;
-    transition: opacity 0.2s;
-    pointer-events: none;
-}
-.cat-img-wrap:hover .hover-overlay {
-    opacity: 1;
-    pointer-events: auto;
-}
 
-/* ── URL paste field (image) ─────────────────────────────── */
-.url-paste-wrap div.stTextInput > div {
+/* ── URL paste input (image field) ───────────────────────── */
+.url-row div.stTextInput > div {
     border: none !important;
     border-top: 1px solid #DEDEDE !important;
     border-radius: 0 !important;
-    background: white !important;
+    background: #FAFAFA !important;
 }
-.url-paste-wrap div.stTextInput > div > div > input {
+.url-row div.stTextInput > div > div > input {
     font-size: 10px !important;
     text-transform: none !important;
     text-align: left !important;
     color: #9A9A9F !important;
+    padding: 6px 8px !important;
 }
 
-/* ── Delete confirmation bar ─────────────────────────────── */
-.del-confirm-bar {
+/* ── Delete confirmation ─────────────────────────────────── */
+.del-bar {
     background: #FFF5F5;
     border-top: 1px solid #FECACA;
     padding: 7px 8px;
@@ -299,56 +285,42 @@ div.stButton > button {
     border: none !important;
     padding: 4px 10px !important;
 }
-div.stButton > button[kind="primary"] {
-    background: #111111 !important;
-    color: white !important;
-}
-div.stButton > button[kind="secondary"] {
-    background: #E8E8E8 !important;
-    color: #111111 !important;
-}
+div.stButton > button[kind="primary"]   { background: #111111 !important; color: white !important; }
+div.stButton > button[kind="secondary"] { background: #E8E8E8 !important; color: #111111 !important; }
 
 /* ── Action bar ──────────────────────────────────────────── */
-.action-bar {
-    background: transparent;
-    padding: 12px 24px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-}
-
-/* ── Content padding (matches tab bar indent) ────────────── */
-.padded { padding: 0 24px; }
+.action-bar { padding: 0 24px 12px; display: flex; gap: 12px; }
 
 /* ── Column gap ──────────────────────────────────────────── */
 div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
 
-/* ── Streamlit image display ─────────────────────────────── */
-div[data-testid="stImage"] img {
-    border-top: 1px solid #DEDEDE;
-    border-bottom: 1px solid #DEDEDE;
-}
+/* ── Streamlit image ─────────────────────────────────────── */
+div[data-testid="stImage"] img { border-top: 1px solid #DEDEDE; border-bottom: 1px solid #DEDEDE; }
 div[data-testid="stImage"] { margin: 0 !important; }
 </style>
-
-<script>
-/* Global action dispatcher — sets URL query params, triggers Streamlit rerun */
-function apAction(action, id) {
-    var url = new URL(window.location.href);
-    url.searchParams.set('ap_action', action);
-    url.searchParams.set('ap_id', id);
-    window.location.href = url.toString();
-}
-</script>
 """, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────────
+#  INLINE JS HELPER  (onclick attributes — React allows these)
+# ─────────────────────────────────────────────────────────────────
+def _js(action: str, iid: str, stop_prop: bool = False) -> str:
+    """Return inline JS that sets query params and navigates.
+    React strips <script> tags but onclick attributes execute normally."""
+    sp = "event.stopPropagation();" if stop_prop else ""
+    return (
+        f"{sp}"
+        f"var u=new URL(window.location.href);"
+        f"u.searchParams.set('ap_action','{action}');"
+        f"u.searchParams.set('ap_id','{iid}');"
+        f"window.location.href=u.toString();"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────
 #  GOOGLE SERVICES
 # ─────────────────────────────────────────────────────────────────
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 SHEET_HEADERS = [
     "id", "brand", "candle_name", "season", "pvr",
     "scent_notes", "ops_notes", "image_url", "status",
@@ -357,17 +329,15 @@ SHEET_HEADERS = [
 
 
 @st.cache_resource
-def _get_services():
+def _get_gc():
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], scopes=SCOPES
     )
-    gc = gspread.authorize(creds)
-    return gc
+    return gspread.authorize(creds)
 
 
 def _sheet():
-    gc = _get_services()
-    ws = gc.open_by_key(st.secrets["sheet_id"]).sheet1
+    ws = _get_gc().open_by_key(st.secrets["sheet_id"]).sheet1
     if not ws.get_all_values():
         ws.append_row(SHEET_HEADERS)
     elif ws.row_values(1) != SHEET_HEADERS:
@@ -400,7 +370,6 @@ def add_item() -> str:
 
 
 def save_field(item_id: str, field: str, raw_value: str):
-    # Don't force-uppercase URLs
     value = raw_value.strip() if field == "image_url" else raw_value.upper().strip()
     ws    = _sheet()
     recs  = ws.get_all_records()
@@ -431,30 +400,21 @@ def set_status_many(ids: list[str], status: str):
     recs   = ws.get_all_records()
     id_set = set(str(i) for i in ids)
     now    = datetime.now().strftime("%Y-%m-%d %H:%M")
-    s_col  = SHEET_HEADERS.index("status") + 1
-    u_col  = SHEET_HEADERS.index("updated_at") + 1
     for i, r in enumerate(recs):
         if str(r["id"]) in id_set:
-            ws.update_cell(i + 2, s_col, status)
-            ws.update_cell(i + 2, u_col, now)
+            ws.update_cell(i + 2, SHEET_HEADERS.index("status") + 1, status)
+            ws.update_cell(i + 2, SHEET_HEADERS.index("updated_at") + 1, now)
     _clear()
 
 
 def copy_to_reshoot(item: dict):
-    """Create an independent copy of a catalog item in the reshoot queue."""
     now    = datetime.now().strftime("%Y-%m-%d %H:%M")
     new_id = str(uuid.uuid4())
     _sheet().append_row([
-        new_id,
-        item.get("brand", ""),
-        item.get("candle_name", ""),
-        item.get("season", ""),
-        item.get("pvr", ""),
-        item.get("scent_notes", ""),
-        item.get("ops_notes", ""),
-        item.get("image_url", ""),   # image carried over
-        "reshoot",
-        now, now,
+        new_id, item.get("brand",""), item.get("candle_name",""),
+        item.get("season",""), item.get("pvr",""), item.get("scent_notes",""),
+        item.get("ops_notes",""), item.get("image_url",""),
+        "reshoot", now, now,
     ])
     _clear()
     return new_id
@@ -474,8 +434,9 @@ def remove_last_empty():
     items    = load_items()
     upcoming = [i for i in items if i.get("status") == "upcoming"]
     for item in reversed(upcoming):
-        fields = ["brand","candle_name","season","pvr","scent_notes","ops_notes","image_url"]
-        if not any(item.get(f,"").strip() for f in fields):
+        if not any(item.get(f,"").strip()
+                   for f in ["brand","candle_name","season","pvr",
+                              "scent_notes","ops_notes","image_url"]):
             delete_item(item["id"])
             return
 
@@ -494,9 +455,9 @@ def send_slack(message: str):
 # ─────────────────────────────────────────────────────────────────
 def _init():
     defaults = {
-        "sel_cw":             set(),
-        "sel_reshoot":        set(),
-        "confirm_delete_id":  None,
+        "sel_cw":            set(),
+        "sel_reshoot":       set(),
+        "confirm_delete_id": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -504,12 +465,10 @@ def _init():
 
 
 def _handle_actions():
-    """Process JS-driven query-param actions before rendering."""
     action = st.query_params.get("ap_action", "")
     ap_id  = st.query_params.get("ap_id", "")
     if not action:
         return
-
     st.query_params.clear()
 
     if action == "cw_sel":
@@ -533,7 +492,6 @@ def _handle_actions():
                 f"🔁 *Reshoot requested*\n"
                 f"*{_fval(item,'candle_name') or 'Unnamed'}*"
                 f" — {_fval(item,'brand') or ''}"
-                f" ({_fval(item,'season') or ''})"
             )
         st.rerun()
 
@@ -561,9 +519,8 @@ def _img(item: dict) -> str:
 
 
 def _ro_field(value: str, placeholder: str) -> str:
-    if value:
-        return f'<div class="ro-field">{value}</div>'
-    return f'<div class="ro-field placeholder">{placeholder}</div>'
+    cls = "ro-field" if value else "ro-field placeholder"
+    return f'<div class="{cls}">{value or placeholder}</div>'
 
 
 def _full_word_search(items: list[dict], query: str) -> list[dict]:
@@ -579,20 +536,25 @@ def _full_word_search(items: list[dict], query: str) -> list[dict]:
     return results
 
 
-def _img_wrap_html(img_url: str, overlay_html: str, height: int = 200) -> str:
-    """Render an image (or grey placeholder) with a hover overlay."""
+def _img_area_html(img_url: str, overlay_html: str = "") -> str:
+    """3:4 image area with optional hover overlay."""
     if img_url:
-        inner = f'<img src="{img_url}" style="width:100%;height:{height}px;object-fit:cover;display:block;">'
+        inner = f'<img src="{img_url}" alt="">'
     else:
-        inner = (f'<div class="noimg" style="height:{height}px;background:#EBEBEB;'
-                 f'display:flex;align-items:center;justify-content:center;'
-                 f'color:#C7C7CC;font-size:13px;">No image</div>')
-    return (
-        f'<div class="img-wrap">'
-        f'{inner}'
-        f'<div class="hover-overlay">{overlay_html}</div>'
-        f'</div>'
-    )
+        inner = (
+            '<div class="img-placeholder">'
+            '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" '
+            'stroke="#C7C7CC" stroke-width="1.5">'
+            '<rect x="3" y="3" width="18" height="18" rx="2"/>'
+            '<circle cx="8.5" cy="8.5" r="1.5"/>'
+            '<path d="M21 15l-5-5L5 21"/>'
+            '</svg>'
+            '<span>No image</span>'
+            '</div>'
+        )
+    overlay = (f'<div class="img-overlay">{overlay_html}</div>'
+               if overlay_html else "")
+    return f'<div class="img-area">{inner}{overlay}</div>'
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -607,8 +569,8 @@ def page_upcoming():
 
     st.markdown('<div class="padded">', unsafe_allow_html=True)
 
-    COLS        = 5
-    total_slots = len(upcoming) + 1   # +1 for the +/- control slot
+    COLS        = 6
+    total_slots = len(upcoming) + 1
     n_rows      = max(1, -(-total_slots // COLS))
 
     slot = 0
@@ -621,7 +583,7 @@ def page_upcoming():
                 slot += 1
             elif slot == len(upcoming):
                 with cols[col_idx]:
-                    st.markdown("<div style='padding-top:6px'>", unsafe_allow_html=True)
+                    st.markdown("<div style='padding-top:4px'>", unsafe_allow_html=True)
                     if st.button("＋", key="add_card", type="primary",
                                  help="Add new product slot"):
                         add_item()
@@ -643,7 +605,6 @@ def _upcoming_card(item: dict):
     iid = str(item["id"])
 
     with st.container(border=True):
-        # ── Text fields (editable, auto-save on change) ──────
         for field, ph in [
             ("brand",       "BRAND/COLLECTION"),
             ("candle_name", "CANDLE NAME"),
@@ -656,30 +617,25 @@ def _upcoming_card(item: dict):
                 v = st.session_state.get(k, "")
                 if v.upper().strip() != v0:
                     save_field(i, f, v)
-            st.text_input(ph, value=val, key=key,
-                          on_change=_save, placeholder=ph,
-                          label_visibility="collapsed")
+            st.text_input(ph, value=val, key=key, on_change=_save,
+                          placeholder=ph, label_visibility="collapsed")
 
-        # ── Image (URL paste) ────────────────────────────────
+        # Image area
         img_url = _img(item)
-        if img_url:
-            st.image(img_url, use_container_width=True)
+        st.markdown(_img_area_html(img_url), unsafe_allow_html=True)
 
-        # URL field — always shown so team can paste DAM link
+        # URL paste field
         key_url = f"up_url_{iid}"
-        cur_url = img_url
-        st.markdown('<div class="url-paste-wrap">', unsafe_allow_html=True)
+        st.markdown('<div class="url-row">', unsafe_allow_html=True)
         new_url = st.text_input(
-            "Image URL", value=cur_url,
-            placeholder="PASTE IMAGE URL",
+            "url", value=img_url, placeholder="PASTE IMAGE URL",
             key=key_url, label_visibility="collapsed"
         )
         st.markdown('</div>', unsafe_allow_html=True)
-        if new_url.strip() != cur_url and new_url.strip():
+        if new_url.strip() != img_url and new_url.strip():
             save_field(iid, "image_url", new_url.strip())
             st.rerun()
 
-        # ── Bottom fields ────────────────────────────────────
         for field, ph in [
             ("scent_notes", "SCENT NOTES"),
             ("ops_notes",   "OPS NOTES"),
@@ -690,11 +646,9 @@ def _upcoming_card(item: dict):
                 v = st.session_state.get(k, "")
                 if v.upper().strip() != v0:
                     save_field(i, f, v)
-            st.text_input(ph, value=val, key=key,
-                          on_change=_save2, placeholder=ph,
-                          label_visibility="collapsed")
+            st.text_input(ph, value=val, key=key, on_change=_save2,
+                          placeholder=ph, label_visibility="collapsed")
 
-        # ── Action buttons ───────────────────────────────────
         st.markdown(
             '<div style="border-top:1px solid #DEDEDE;background:white;padding:6px 8px;">',
             unsafe_allow_html=True
@@ -710,9 +664,8 @@ def _upcoming_card(item: dict):
                 set_status(iid, "current_week")
                 st.rerun()
         with c2:
-            if st.button("🗑", key=f"up_del_{iid}",
-                         type="secondary", use_container_width=True,
-                         help="Delete this item"):
+            if st.button("🗑", key=f"up_del_{iid}", type="secondary",
+                         use_container_width=True, help="Delete"):
                 delete_item(iid)
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -730,9 +683,8 @@ def page_current_week():
 
     sel: set = st.session_state.sel_cw
 
-    # ── Action bar (shown when items are selected) ────────────
     if sel:
-        st.markdown('<div class="padded action-bar">', unsafe_allow_html=True)
+        st.markdown('<div class="action-bar">', unsafe_allow_html=True)
         c1, _ = st.columns([2, 8])
         with c1:
             if st.button(f"MOVE TO CATALOG  ({len(sel)})",
@@ -745,16 +697,14 @@ def page_current_week():
     if not cw:
         st.markdown(
             '<div style="text-align:center;color:#9A9A9F;font-size:14px;'
-            'padding:80px 20px;">No items yet. Add items from the '
-            '"Upcoming in Studio" tab.</div>',
-            unsafe_allow_html=True
-        )
+            'padding:80px 20px;">No items yet — add from Upcoming in Studio.</div>',
+            unsafe_allow_html=True)
         return
 
     st.markdown('<div class="padded">', unsafe_allow_html=True)
-    cols = st.columns(5, gap="small")
+    cols = st.columns(6, gap="small")
     for idx, item in enumerate(cw):
-        with cols[idx % 5]:
+        with cols[idx % 6]:
             _cw_card(item)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -767,33 +717,26 @@ def _cw_card(item: dict):
     fields_html = "".join(
         _ro_field(_fval(item, f), ph)
         for f, ph in [
-            ("brand",       "BRAND/COLLECTION"),
-            ("candle_name", "CANDLE NAME"),
-            ("season",      "SEASON"),
-            ("pvr",         "PVR"),
+            ("brand","BRAND/COLLECTION"), ("candle_name","CANDLE NAME"),
+            ("season","SEASON"), ("pvr","PVR"),
         ]
     )
-
-    # Arrow appears top-left of image on hover → sends card back to Upcoming
-    arrow_overlay = (
-        f'<button class="hover-btn hover-btn-tl" '
-        f'onclick="event.stopPropagation(); apAction(\'cw_back\', \'{iid}\')" '
-        f'title="Return to Upcoming">←</button>'
-    )
-    img_html = _img_wrap_html(_img(item), arrow_overlay, height=200)
-
     bottom_html = "".join(
         _ro_field(_fval(item, f), ph)
-        for f, ph in [
-            ("scent_notes", "SCENT NOTES"),
-            ("ops_notes",   "OPS NOTES"),
-        ]
+        for f, ph in [("scent_notes","SCENT NOTES"), ("ops_notes","OPS NOTES")]
     )
 
-    # Entire card is clickable — toggles selection via JS → query param
+    # Back-arrow button in top-left of image on hover
+    arrow = (
+        f'<button class="hbtn hbtn-tl" '
+        f'onclick="{_js("cw_back", iid, stop_prop=True)}" title="Return to Upcoming">'
+        f'←</button>'
+    )
+    img_html = _img_area_html(_img(item), arrow)
+
+    # Entire card clickable → toggle selection
     st.markdown(
-        f'<div class="ap-card {sel_cls}" '
-        f'onclick="apAction(\'cw_sel\', \'{iid}\')">'
+        f'<div class="ap-card {sel_cls}" onclick="{_js("cw_sel", iid)}">'
         f'{fields_html}{img_html}{bottom_html}'
         f'</div>',
         unsafe_allow_html=True
@@ -806,44 +749,28 @@ def _cw_card(item: dict):
 def page_catalog():
     items   = load_items()
     catalog = [i for i in items if i.get("status") == "catalog"]
-    catalog.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+    catalog.sort(key=lambda x: x.get("updated_at",""), reverse=True)
 
     st.markdown('<div class="page-title">≡ HOME FRAGRANCE CATALOG</div>',
                 unsafe_allow_html=True)
     st.markdown('<div class="padded">', unsafe_allow_html=True)
 
-    # ── Search bar ────────────────────────────────────────────
-    query = st.text_input(
-        "Search",
-        placeholder="🔍  Search library…",
-        key="cat_search",
-        label_visibility="collapsed"
-    )
-
+    query    = st.text_input("Search", placeholder="🔍  Search library…",
+                             key="cat_search", label_visibility="collapsed")
     filtered = _full_word_search(catalog, query)
 
     if not filtered:
-        if query:
-            st.markdown(
-                f'<div style="color:#9A9A9F;font-size:14px;padding:40px 0;">'
-                f'No results for "{query}".</div>',
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown("""
-            <div style="background:white;border:1px solid #DEDEDE;border-radius:8px;
-                        padding:70px;text-align:center;">
-                <div style="font-size:36px;color:#C7C7CC;margin-bottom:12px;">≡</div>
-                <div style="font-size:15px;color:#9A9A9F;">No archived items yet</div>
-                <div style="font-size:13px;color:#C7C7CC;margin-top:4px;">
-                    Items moved from Current Week will appear here</div>
-            </div>""", unsafe_allow_html=True)
+        msg = (f'No results for "{query}".' if query
+               else "No archived items yet. Items moved from Current Week will appear here.")
+        st.markdown(
+            f'<div style="text-align:center;color:#9A9A9F;font-size:14px;padding:60px 0;">'
+            f'{msg}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         return
 
-    cols = st.columns(5, gap="small")
+    cols = st.columns(6, gap="small")
     for idx, item in enumerate(filtered):
-        with cols[idx % 5]:
+        with cols[idx % 6]:
             _catalog_card(item)
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -856,10 +783,8 @@ def _catalog_card(item: dict):
     info_lines = [
         (_fval(item, f) or ph, bool(_fval(item, f)))
         for f, ph in [
-            ("brand",       "BRAND/COLLECTION"),
-            ("candle_name", "CANDLE NAME"),
-            ("season",      "SEASON"),
-            ("pvr",         "PVR"),
+            ("brand","BRAND/COLLECTION"), ("candle_name","CANDLE NAME"),
+            ("season","SEASON"), ("pvr","PVR"),
         ]
     ]
     info_html = "<br>".join(
@@ -867,56 +792,37 @@ def _catalog_card(item: dict):
         for text, has_val in info_lines
     )
 
-    # Hover icons: ♻ (reshoot) and 🗑 (delete confirm) in top-right of image
-    cat_overlay = (
-        f'<button class="hover-btn hover-btn-tr2" '
-        f'onclick="apAction(\'cat_reshoot\', \'{iid}\')" title="Request Reshoot">♻</button>'
-        f'<button class="hover-btn hover-btn-tr" '
-        f'onclick="apAction(\'cat_delete_ask\', \'{iid}\')" title="Delete">🗑</button>'
+    # ♻ (blue) and 🗑 (red) appear on hover in top-right of image
+    icons = (
+        f'<button class="hbtn hbtn-tr2" '
+        f'onclick="{_js("cat_reshoot", iid, stop_prop=True)}" title="Request Reshoot">♻</button>'
+        f'<button class="hbtn hbtn-tr" '
+        f'onclick="{_js("cat_delete_ask", iid, stop_prop=True)}" title="Delete">🗑</button>'
     )
-
-    img_url = _img(item)
-    if img_url:
-        img_inner = f'<img src="{img_url}" style="width:100%;height:220px;object-fit:cover;display:block;">'
-    else:
-        img_inner = ('<div class="noimg" style="height:220px;background:#EBEBEB;'
-                     'display:flex;align-items:center;justify-content:center;'
-                     'color:#C7C7CC;font-size:13px;">No image</div>')
-
-    img_section = (
-        f'<div class="cat-img-wrap">'
-        f'{img_inner}'
-        f'<div class="hover-overlay">{cat_overlay}</div>'
-        f'</div>'
-    )
+    img_html = _img_area_html(_img(item), icons)
 
     st.markdown(
         f'<div class="cat-card">'
         f'<div class="cat-card-info">{info_html}</div>'
-        f'{img_section}'
-        f'</div>',
+        f'{img_html}</div>',
         unsafe_allow_html=True
     )
 
-    # ── URL paste field ───────────────────────────────────────
+    # URL paste field
     key_url = f"cat_url_{iid}"
-    st.markdown('<div class="url-paste-wrap">', unsafe_allow_html=True)
+    st.markdown('<div class="url-row">', unsafe_allow_html=True)
     new_url = st.text_input(
-        "Image URL", value=img_url,
-        placeholder="PASTE IMAGE URL FROM DAM",
+        "url", value=_img(item), placeholder="PASTE IMAGE URL FROM DAM",
         key=key_url, label_visibility="collapsed"
     )
     st.markdown('</div>', unsafe_allow_html=True)
-    if new_url.strip() != img_url and new_url.strip():
+    if new_url.strip() != _img(item) and new_url.strip():
         save_field(iid, "image_url", new_url.strip())
         st.rerun()
 
-    # ── Delete confirmation (replaces normal state) ───────────
+    # Delete confirmation
     if confirm:
-        st.markdown(
-            '<div class="del-confirm-bar">Are you sure you want to delete this?</div>',
-            unsafe_allow_html=True
-        )
+        st.markdown('<div class="del-bar">Are you sure?</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
             if st.button("YES, DELETE", key=f"cat_conf_{iid}",
@@ -943,9 +849,8 @@ def page_reshoot():
 
     sel: set = st.session_state.sel_reshoot
 
-    # ── Action bar (when items selected) ─────────────────────
     if sel:
-        st.markdown('<div class="padded action-bar">', unsafe_allow_html=True)
+        st.markdown('<div class="action-bar">', unsafe_allow_html=True)
         c1, c2, _ = st.columns([2, 2, 6])
         with c1:
             if st.button(f"MOVE TO UPCOMING  ({len(sel)})",
@@ -980,16 +885,14 @@ def page_reshoot():
         <div style="background:white;border:1px solid #DEDEDE;border-radius:8px;
                     margin:0 24px;padding:70px;text-align:center;">
             <div style="font-size:36px;color:#C7C7CC;margin-bottom:12px;">↺</div>
-            <div style="font-size:15px;color:#9A9A9F;">No items marked for reshoots</div>
-            <div style="font-size:13px;color:#C7C7CC;margin-top:4px;">
-                Items recycled from the catalog will appear here</div>
+            <div style="font-size:15px;color:#9A9A9F;">No reshoot requests yet</div>
         </div>""", unsafe_allow_html=True)
         return
 
     st.markdown('<div class="padded">', unsafe_allow_html=True)
-    cols = st.columns(5, gap="small")
+    cols = st.columns(6, gap="small")
     for idx, item in enumerate(reshoot):
-        with cols[idx % 5]:
+        with cols[idx % 6]:
             _reshoot_card(item)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1002,44 +905,34 @@ def _reshoot_card(item: dict):
     fields_html = "".join(
         _ro_field(_fval(item, f), ph)
         for f, ph in [
-            ("brand",       "BRAND/COLLECTION"),
-            ("candle_name", "CANDLE NAME"),
-            ("season",      "SEASON"),
-            ("pvr",         "PVR"),
+            ("brand","BRAND/COLLECTION"), ("candle_name","CANDLE NAME"),
+            ("season","SEASON"), ("pvr","PVR"),
         ]
     )
-    img_html    = _img_wrap_html(_img(item), "", height=200)
-    scent_html  = _ro_field(_fval(item, "scent_notes"), "SCENT NOTES")
+    img_html   = _img_area_html(_img(item))
+    scent_html = _ro_field(_fval(item, "scent_notes"), "SCENT NOTES")
 
-    # Entire card is clickable — toggles selection
+    # Entire card clickable → toggle selection
     st.markdown(
-        f'<div class="ap-card {sel_cls}" '
-        f'onclick="apAction(\'re_sel\', \'{iid}\')">'
+        f'<div class="ap-card {sel_cls}" onclick="{_js("re_sel", iid)}">'
         f'{fields_html}{img_html}{scent_html}'
         f'</div>',
         unsafe_allow_html=True
     )
 
-    # ── Ops Notes (EDITABLE — sits below the clickable card) ──
+    # Editable ops notes — flush below card
     key_ops = f"re_ops_{iid}"
     def _save_ops(k=key_ops, i=iid):
-        v = st.session_state.get(k, "")
-        save_field(i, "ops_notes", v)
+        save_field(i, "ops_notes", st.session_state.get(k, ""))
 
-    # Style ops notes to look like a card extension
     st.markdown(
         '<div style="background:white;border:1px solid #DEDEDE;border-top:none;'
         'border-radius:0 0 6px 6px;overflow:hidden;margin-top:-8px;margin-bottom:8px;">',
         unsafe_allow_html=True
     )
-    st.text_input(
-        "OPS NOTES",
-        value=_fval(item, "ops_notes"),
-        key=key_ops,
-        on_change=_save_ops,
-        placeholder="OPS NOTES",
-        label_visibility="collapsed"
-    )
+    st.text_input("OPS NOTES", value=_fval(item, "ops_notes"),
+                  key=key_ops, on_change=_save_ops, placeholder="OPS NOTES",
+                  label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
 
 
