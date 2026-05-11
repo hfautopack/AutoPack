@@ -1,5 +1,5 @@
 """
-Home Fragrance AutoPack — Streamlit Web App v2
+Home Fragrance AutoPack — Streamlit Web App v3
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 See secrets_template.toml for required credentials.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -8,10 +8,8 @@ See secrets_template.toml for required credentials.
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 from datetime import datetime
-import uuid, io, re, requests
+import uuid, re, requests
 
 # ─────────────────────────────────────────────────────────────────
 #  PAGE CONFIG
@@ -24,7 +22,7 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────────
-#  STYLES
+#  STYLES + GLOBAL JS
 # ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -66,9 +64,7 @@ section[data-testid="stMainBlockContainer"] {
 }
 .stTabs [data-baseweb="tab-highlight"],
 .stTabs [data-baseweb="tab-border"] { display: none; }
-div[data-testid="stTabs"] > div:first-child {
-    margin-bottom: 0 !important;
-}
+div[data-testid="stTabs"] > div:first-child { margin-bottom: 0 !important; }
 
 /* ── Page titles ─────────────────────────────────────────── */
 .page-title {
@@ -78,7 +74,6 @@ div[data-testid="stTabs"] > div:first-child {
     letter-spacing: -0.5px;
     padding: 20px 24px 4px;
 }
-.page-title-icon { margin-right: 10px; }
 
 /* ── ALL CAPS on every text input & textarea ─────────────── */
 input[type="text"], textarea {
@@ -86,12 +81,6 @@ input[type="text"], textarea {
     text-align: center !important;
     font-size: 11px !important;
     letter-spacing: 0.3px !important;
-}
-/* Exception: search bar stays normal */
-input.search-input {
-    text-transform: none !important;
-    text-align: left !important;
-    font-size: 14px !important;
 }
 
 /* ── Remove labels from inputs ───────────────────────────── */
@@ -104,6 +93,7 @@ div.stTextInput > div {
     border-bottom: 1px solid #DEDEDE !important;
     border-radius: 0 !important;
     background: white;
+    box-shadow: none !important;
 }
 div.stTextInput > div > div { border: none !important; }
 div.stTextInput > div > div > input {
@@ -118,38 +108,7 @@ div.stTextInput > div:focus-within {
     box-shadow: none !important;
 }
 
-/* Ops-notes textarea */
-div.stTextArea > div { border: none !important; border-top: 1px solid #DEDEDE !important; border-radius: 0 !important; }
-div.stTextArea > div > div > textarea {
-    border: none !important;
-    border-radius: 0 !important;
-    background: white !important;
-    min-height: 60px !important;
-    font-size: 11px !important;
-    text-align: center !important;
-    text-transform: uppercase !important;
-    box-shadow: none !important;
-}
-
-/* ── File uploader (image area) ──────────────────────────── */
-div[data-testid="stFileUploaderDropzone"] {
-    background: white !important;
-    border: none !important;
-    border-radius: 0 !important;
-    padding: 18px 8px !important;
-    min-height: 180px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-div[data-testid="stFileUploaderDropzoneInstructions"] > div > span {
-    font-size: 11px !important;
-    color: #C7C7CC !important;
-}
-div[data-testid="stFileUploaderDropzoneInstructions"] > div > small { display: none; }
-div[data-testid="stFileUploader"] section > button { display: none; }
-
-/* ── Upcoming card column borders ────────────────────────── */
+/* ── Upcoming card container: zero gap between stacked inputs */
 div[data-testid="stVerticalBlockBorderWrapper"] {
     background: white !important;
     border: 1px solid #DEDEDE !important;
@@ -161,12 +120,20 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
     padding: 0 !important;
     gap: 0 !important;
 }
-/* Remove gap between stacked inputs */
+div[data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+}
 div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
     margin: 0 !important;
+    padding: 0 !important;
+}
+/* Remove any extra spacing Streamlit adds between widgets */
+div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlock"] > * {
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
 }
 
-/* ── Read-only field rows (CW / Reshoot) ─────────────────── */
+/* ── Read-only field rows (HTML divs) ────────────────────── */
 .ro-field {
     background: white;
     border-bottom: 1px solid #DEDEDE;
@@ -179,16 +146,34 @@ div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
     min-height: 32px;
 }
 .ro-field.placeholder { color: #C7C7CC; }
-.ro-card {
+
+/* ── Clickable card (CW + Reshoot) ──────────────────────── */
+.ap-card {
     background: white;
     border: 1px solid #DEDEDE;
     border-radius: 6px;
     overflow: hidden;
     margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    user-select: none;
 }
-.ro-card.selected { border: 2px solid #1A73E8 !important; }
-.ro-card-img { width: 100%; display: block; object-fit: cover; height: 200px; }
-.ro-card-noimg {
+.ap-card:hover { border-color: #ABABAB; }
+.ap-card.selected { border: 2px solid #1A73E8 !important; }
+.ap-card.selected:hover { border-color: #1A73E8; }
+
+/* ── Image wrapper with hover overlay ───────────────────── */
+.img-wrap {
+    position: relative;
+    overflow: hidden;
+}
+.img-wrap img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    display: block;
+}
+.img-wrap .noimg {
     height: 200px;
     background: #EBEBEB;
     display: flex;
@@ -197,6 +182,38 @@ div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
     color: #C7C7CC;
     font-size: 13px;
 }
+.img-wrap .hover-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+}
+.img-wrap:hover .hover-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+.hover-btn {
+    position: absolute;
+    cursor: pointer;
+    background: rgba(0,0,0,0.55);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    line-height: 1;
+    padding: 0;
+}
+.hover-btn:hover { background: rgba(0,0,0,0.82); }
+.hover-btn-tl { top: 8px; left: 8px; }
+.hover-btn-tr { top: 8px; right: 8px; }
+.hover-btn-tr2 { top: 8px; right: 48px; }
 
 /* ── Catalog card ────────────────────────────────────────── */
 .cat-card {
@@ -204,7 +221,7 @@ div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
     border: 1px solid #DEDEDE;
     border-radius: 6px;
     overflow: hidden;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 .cat-card-info {
     padding: 8px;
@@ -215,8 +232,17 @@ div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
     border-bottom: 1px solid #DEDEDE;
     line-height: 1.9;
 }
-.cat-card-img { width: 100%; height: 220px; object-fit: cover; display: block; }
-.cat-card-noimg {
+.cat-img-wrap {
+    position: relative;
+    overflow: hidden;
+}
+.cat-img-wrap img {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+    display: block;
+}
+.cat-img-wrap .noimg {
     height: 220px;
     background: #EBEBEB;
     display: flex;
@@ -224,6 +250,44 @@ div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
     justify-content: center;
     color: #C7C7CC;
     font-size: 13px;
+}
+.cat-img-wrap .hover-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+}
+.cat-img-wrap:hover .hover-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ── URL paste field (image) ─────────────────────────────── */
+.url-paste-wrap div.stTextInput > div {
+    border: none !important;
+    border-top: 1px solid #DEDEDE !important;
+    border-radius: 0 !important;
+    background: white !important;
+}
+.url-paste-wrap div.stTextInput > div > div > input {
+    font-size: 10px !important;
+    text-transform: none !important;
+    text-align: left !important;
+    color: #9A9A9F !important;
+}
+
+/* ── Delete confirmation bar ─────────────────────────────── */
+.del-confirm-bar {
+    background: #FFF5F5;
+    border-top: 1px solid #FECACA;
+    padding: 7px 8px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #E63946;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 /* ── Buttons ─────────────────────────────────────────────── */
@@ -243,18 +307,8 @@ div.stButton > button[kind="secondary"] {
     background: #E8E8E8 !important;
     color: #111111 !important;
 }
-/* Circle add/remove buttons */
-button.circle-add, button.circle-remove {
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    font-size: 22px;
-    font-weight: 700;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-}
 
-/* ── Action bar (shown when cards selected) ──────────────── */
+/* ── Action bar ──────────────────────────────────────────── */
 .action-bar {
     background: transparent;
     padding: 12px 24px;
@@ -262,39 +316,11 @@ button.circle-add, button.circle-remove {
     gap: 12px;
     align-items: center;
 }
-.action-bar-btn {
-    padding: 12px 28px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-}
-.action-bar-btn.black  { background: #111; color: white; }
-.action-bar-btn.red    { background: #E63946; color: white; }
-.action-bar-btn.blue   { background: #1A73E8; color: white; }
 
-/* ── Search bar ──────────────────────────────────────────── */
-div[data-testid="stTextInput"].search-wrapper > div {
-    border: 1px solid #DEDEDE !important;
-    border-radius: 24px !important;
-    border-bottom: 1px solid #DEDEDE !important;
-    background: white;
-}
-div[data-testid="stTextInput"].search-wrapper > div > div > input {
-    text-transform: none !important;
-    text-align: left !important;
-    font-size: 14px !important;
-    border-radius: 24px !important;
-    padding-left: 14px !important;
-}
-
-/* ── Content padding ─────────────────────────────────────── */
+/* ── Content padding (matches tab bar indent) ────────────── */
 .padded { padding: 0 24px; }
 
-/* ── Column gap fix ──────────────────────────────────────── */
+/* ── Column gap ──────────────────────────────────────────── */
 div[data-testid="stHorizontalBlock"] { gap: 10px !important; }
 
 /* ── Streamlit image display ─────────────────────────────── */
@@ -304,6 +330,16 @@ div[data-testid="stImage"] img {
 }
 div[data-testid="stImage"] { margin: 0 !important; }
 </style>
+
+<script>
+/* Global action dispatcher — sets URL query params, triggers Streamlit rerun */
+function apAction(action, id) {
+    var url = new URL(window.location.href);
+    url.searchParams.set('ap_action', action);
+    url.searchParams.set('ap_id', id);
+    window.location.href = url.toString();
+}
+</script>
 """, unsafe_allow_html=True)
 
 
@@ -312,7 +348,6 @@ div[data-testid="stImage"] { margin: 0 !important; }
 # ─────────────────────────────────────────────────────────────────
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
 ]
 SHEET_HEADERS = [
     "id", "brand", "candle_name", "season", "pvr",
@@ -326,13 +361,12 @@ def _get_services():
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], scopes=SCOPES
     )
-    gc    = gspread.authorize(creds)
-    drive = build("drive", "v3", credentials=creds)
-    return gc, drive
+    gc = gspread.authorize(creds)
+    return gc
 
 
 def _sheet():
-    gc, _ = _get_services()
+    gc = _get_services()
     ws = gc.open_by_key(st.secrets["sheet_id"]).sheet1
     if not ws.get_all_values():
         ws.append_row(SHEET_HEADERS)
@@ -366,7 +400,8 @@ def add_item() -> str:
 
 
 def save_field(item_id: str, field: str, raw_value: str):
-    value = raw_value.upper().strip()
+    # Don't force-uppercase URLs
+    value = raw_value.strip() if field == "image_url" else raw_value.upper().strip()
     ws    = _sheet()
     recs  = ws.get_all_records()
     col   = SHEET_HEADERS.index(field) + 1
@@ -392,12 +427,12 @@ def set_status(item_id: str, status: str):
 
 
 def set_status_many(ids: list[str], status: str):
-    ws   = _sheet()
-    recs = ws.get_all_records()
+    ws     = _sheet()
+    recs   = ws.get_all_records()
     id_set = set(str(i) for i in ids)
-    now  = datetime.now().strftime("%Y-%m-%d %H:%M")
-    s_col = SHEET_HEADERS.index("status") + 1
-    u_col = SHEET_HEADERS.index("updated_at") + 1
+    now    = datetime.now().strftime("%Y-%m-%d %H:%M")
+    s_col  = SHEET_HEADERS.index("status") + 1
+    u_col  = SHEET_HEADERS.index("updated_at") + 1
     for i, r in enumerate(recs):
         if str(r["id"]) in id_set:
             ws.update_cell(i + 2, s_col, status)
@@ -417,7 +452,7 @@ def copy_to_reshoot(item: dict):
         item.get("pvr", ""),
         item.get("scent_notes", ""),
         item.get("ops_notes", ""),
-        item.get("image_url", ""),
+        item.get("image_url", ""),   # image carried over
         "reshoot",
         now, now,
     ])
@@ -436,8 +471,7 @@ def delete_item(item_id: str):
 
 
 def remove_last_empty():
-    """Remove the most recently added item that has no data filled in."""
-    items = load_items()
+    items    = load_items()
     upcoming = [i for i in items if i.get("status") == "upcoming"]
     for item in reversed(upcoming):
         fields = ["brand","candle_name","season","pvr","scent_notes","ops_notes","image_url"]
@@ -446,43 +480,73 @@ def remove_last_empty():
             return
 
 
-def upload_image(file_bytes: bytes, filename: str, mime: str) -> str:
-    _, drive = _get_services()
-    folder   = st.secrets["drive_folder_id"]
-    media    = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime)
-    f = drive.files().create(
-        body={"name": filename, "parents": [folder]},
-        media_body=media, fields="id"
-    ).execute()
-    fid = f["id"]
-    drive.permissions().create(
-        fileId=fid, body={"type": "anyone", "role": "reader"}
-    ).execute()
-    return f"https://drive.google.com/uc?export=view&id={fid}"
-
-
 def send_slack(message: str):
-    """Send a message to the configured Slack webhook (optional)."""
     try:
         webhook = st.secrets.get("slack_webhook_url", "")
         if webhook:
             requests.post(webhook, json={"text": message}, timeout=5)
     except Exception:
-        pass  # Slack is optional — never block the app
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────
-#  SESSION STATE
+#  SESSION STATE + ACTION HANDLER
 # ─────────────────────────────────────────────────────────────────
 def _init():
-    for k, v in {
-        "sel_cw":      set(),
-        "sel_reshoot": set(),
-    }.items():
+    defaults = {
+        "sel_cw":             set(),
+        "sel_reshoot":        set(),
+        "confirm_delete_id":  None,
+    }
+    for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
-_init()
+
+def _handle_actions():
+    """Process JS-driven query-param actions before rendering."""
+    action = st.query_params.get("ap_action", "")
+    ap_id  = st.query_params.get("ap_id", "")
+    if not action:
+        return
+
+    st.query_params.clear()
+
+    if action == "cw_sel":
+        if ap_id in st.session_state.sel_cw:
+            st.session_state.sel_cw.discard(ap_id)
+        else:
+            st.session_state.sel_cw.add(ap_id)
+        st.rerun()
+
+    elif action == "cw_back":
+        st.session_state.sel_cw.discard(ap_id)
+        set_status(ap_id, "upcoming")
+        st.rerun()
+
+    elif action == "cat_reshoot":
+        items = load_items()
+        item  = next((i for i in items if str(i["id"]) == ap_id), None)
+        if item:
+            copy_to_reshoot(item)
+            send_slack(
+                f"🔁 *Reshoot requested*\n"
+                f"*{_fval(item,'candle_name') or 'Unnamed'}*"
+                f" — {_fval(item,'brand') or ''}"
+                f" ({_fval(item,'season') or ''})"
+            )
+        st.rerun()
+
+    elif action == "cat_delete_ask":
+        st.session_state.confirm_delete_id = ap_id
+        st.rerun()
+
+    elif action == "re_sel":
+        if ap_id in st.session_state.sel_reshoot:
+            st.session_state.sel_reshoot.discard(ap_id)
+        else:
+            st.session_state.sel_reshoot.add(ap_id)
+        st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -497,25 +561,38 @@ def _img(item: dict) -> str:
 
 
 def _ro_field(value: str, placeholder: str) -> str:
-    """Return HTML for a read-only field row."""
     if value:
         return f'<div class="ro-field">{value}</div>'
     return f'<div class="ro-field placeholder">{placeholder}</div>'
 
 
 def _full_word_search(items: list[dict], query: str) -> list[dict]:
-    """Return items where ALL space-separated query tokens appear as full words
-    in at least one of the item's text fields."""
     if not query.strip():
         return items
-    tokens = query.strip().split()
-    searchable = ["brand", "candle_name", "season", "pvr", "scent_notes", "ops_notes"]
-    results = []
+    tokens     = query.strip().split()
+    searchable = ["brand","candle_name","season","pvr","scent_notes","ops_notes"]
+    results    = []
     for item in items:
-        haystack = " ".join(str(item.get(f, "") or "") for f in searchable).upper()
+        haystack = " ".join(str(item.get(f,"") or "") for f in searchable).upper()
         if all(re.search(r'\b' + re.escape(t.upper()) + r'\b', haystack) for t in tokens):
             results.append(item)
     return results
+
+
+def _img_wrap_html(img_url: str, overlay_html: str, height: int = 200) -> str:
+    """Render an image (or grey placeholder) with a hover overlay."""
+    if img_url:
+        inner = f'<img src="{img_url}" style="width:100%;height:{height}px;object-fit:cover;display:block;">'
+    else:
+        inner = (f'<div class="noimg" style="height:{height}px;background:#EBEBEB;'
+                 f'display:flex;align-items:center;justify-content:center;'
+                 f'color:#C7C7CC;font-size:13px;">No image</div>')
+    return (
+        f'<div class="img-wrap">'
+        f'{inner}'
+        f'<div class="hover-overlay">{overlay_html}</div>'
+        f'</div>'
+    )
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -530,32 +607,26 @@ def page_upcoming():
 
     st.markdown('<div class="padded">', unsafe_allow_html=True)
 
-    COLS = 4
-    # We'll render cards + the +/- buttons in the same row grid
-    total_slots = len(upcoming) + 1  # +1 for the +/- control slot
-    n_rows = max(1, -(-total_slots // COLS))  # ceiling division
+    COLS        = 5
+    total_slots = len(upcoming) + 1   # +1 for the +/- control slot
+    n_rows      = max(1, -(-total_slots // COLS))
 
     slot = 0
     for row in range(n_rows):
         cols = st.columns(COLS, gap="small")
         for col_idx in range(COLS):
             if slot < len(upcoming):
-                item = upcoming[slot]
                 with cols[col_idx]:
-                    _upcoming_card(item)
+                    _upcoming_card(upcoming[slot])
                 slot += 1
             elif slot == len(upcoming):
-                # +/- buttons slot
                 with cols[col_idx]:
                     st.markdown("<div style='padding-top:6px'>", unsafe_allow_html=True)
                     if st.button("＋", key="add_card", type="primary",
                                  help="Add new product slot"):
                         add_item()
                         st.rerun()
-                    st.markdown(
-                        '<div style="margin-top:8px">',
-                        unsafe_allow_html=True
-                    )
+                    st.markdown('<div style="margin-top:8px">', unsafe_allow_html=True)
                     if st.button("－", key="rem_card",
                                  help="Remove last empty slot"):
                         remove_last_empty()
@@ -572,7 +643,7 @@ def _upcoming_card(item: dict):
     iid = str(item["id"])
 
     with st.container(border=True):
-        # ── Text fields (auto-save on change) ───────────────
+        # ── Text fields (editable, auto-save on change) ──────
         for field, ph in [
             ("brand",       "BRAND/COLLECTION"),
             ("candle_name", "CANDLE NAME"),
@@ -581,39 +652,32 @@ def _upcoming_card(item: dict):
         ]:
             key = f"up_{iid}_{field}"
             val = _fval(item, field)
-            def _save(f=field, k=key, i=iid):
+            def _save(f=field, k=key, i=iid, v0=val):
                 v = st.session_state.get(k, "")
-                if v and v.upper() != _fval(item, f):
+                if v.upper().strip() != v0:
                     save_field(i, f, v)
             st.text_input(ph, value=val, key=key,
-                          on_change=_save,
-                          placeholder=ph,
+                          on_change=_save, placeholder=ph,
                           label_visibility="collapsed")
 
-        # ── Image ────────────────────────────────────────────
+        # ── Image (URL paste) ────────────────────────────────
         img_url = _img(item)
         if img_url:
             st.image(img_url, use_container_width=True)
-            # Replace image button
-            new_img = st.file_uploader(
-                "Replace image", type=["png","jpg","jpeg","webp","gif"],
-                key=f"up_img_{iid}", label_visibility="collapsed"
-            )
-            if new_img:
-                with st.spinner("Uploading…"):
-                    url = upload_image(new_img.read(), new_img.name, new_img.type)
-                    save_field(iid, "image_url", url)
-                st.rerun()
-        else:
-            new_img = st.file_uploader(
-                "Click or paste image", type=["png","jpg","jpeg","webp","gif"],
-                key=f"up_img_{iid}", label_visibility="collapsed"
-            )
-            if new_img:
-                with st.spinner("Uploading…"):
-                    url = upload_image(new_img.read(), new_img.name, new_img.type)
-                    save_field(iid, "image_url", url)
-                st.rerun()
+
+        # URL field — always shown so team can paste DAM link
+        key_url = f"up_url_{iid}"
+        cur_url = img_url
+        st.markdown('<div class="url-paste-wrap">', unsafe_allow_html=True)
+        new_url = st.text_input(
+            "Image URL", value=cur_url,
+            placeholder="PASTE IMAGE URL",
+            key=key_url, label_visibility="collapsed"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+        if new_url.strip() != cur_url and new_url.strip():
+            save_field(iid, "image_url", new_url.strip())
+            st.rerun()
 
         # ── Bottom fields ────────────────────────────────────
         for field, ph in [
@@ -622,13 +686,12 @@ def _upcoming_card(item: dict):
         ]:
             key = f"up_{iid}_{field}"
             val = _fval(item, field)
-            def _save2(f=field, k=key, i=iid):
+            def _save2(f=field, k=key, i=iid, v0=val):
                 v = st.session_state.get(k, "")
-                if v and v.upper() != _fval(item, f):
+                if v.upper().strip() != v0:
                     save_field(i, f, v)
             st.text_input(ph, value=val, key=key,
-                          on_change=_save2,
-                          placeholder=ph,
+                          on_change=_save2, placeholder=ph,
                           label_visibility="collapsed")
 
         # ── Action buttons ───────────────────────────────────
@@ -640,7 +703,6 @@ def _upcoming_card(item: dict):
         with c1:
             if st.button("→ CURRENT WEEK", key=f"up_adv_{iid}",
                          type="primary", use_container_width=True):
-                # Save any pending session_state changes first
                 for f in ["brand","candle_name","season","pvr","scent_notes","ops_notes"]:
                     k = f"up_{iid}_{f}"
                     if k in st.session_state:
@@ -668,19 +730,14 @@ def page_current_week():
 
     sel: set = st.session_state.sel_cw
 
-    # ── Action bar (when items selected) ─────────────────────
+    # ── Action bar (shown when items are selected) ────────────
     if sel:
         st.markdown('<div class="padded action-bar">', unsafe_allow_html=True)
-        c1, c2, _ = st.columns([2, 2, 6])
+        c1, _ = st.columns([2, 8])
         with c1:
             if st.button(f"MOVE TO CATALOG  ({len(sel)})",
                          type="primary", use_container_width=True):
                 set_status_many(list(sel), "catalog")
-                st.session_state.sel_cw = set()
-                st.rerun()
-        with c2:
-            if st.button("CLEAR SELECTION", type="secondary",
-                         use_container_width=True):
                 st.session_state.sel_cw = set()
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -695,9 +752,9 @@ def page_current_week():
         return
 
     st.markdown('<div class="padded">', unsafe_allow_html=True)
-    cols = st.columns(4, gap="small")
+    cols = st.columns(5, gap="small")
     for idx, item in enumerate(cw):
-        with cols[idx % 4]:
+        with cols[idx % 5]:
             _cw_card(item)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -705,9 +762,8 @@ def page_current_week():
 def _cw_card(item: dict):
     iid      = str(item["id"])
     selected = iid in st.session_state.sel_cw
-    border   = "2px solid #1A73E8" if selected else "1px solid #DEDEDE"
+    sel_cls  = "selected" if selected else ""
 
-    # Top info + image + bottom info rendered as HTML
     fields_html = "".join(
         _ro_field(_fval(item, f), ph)
         for f, ph in [
@@ -717,11 +773,15 @@ def _cw_card(item: dict):
             ("pvr",         "PVR"),
         ]
     )
-    img_html = (
-        f'<img class="ro-card-img" src="{_img(item)}">'
-        if _img(item)
-        else '<div class="ro-card-noimg">No image</div>'
+
+    # Arrow appears top-left of image on hover → sends card back to Upcoming
+    arrow_overlay = (
+        f'<button class="hover-btn hover-btn-tl" '
+        f'onclick="event.stopPropagation(); apAction(\'cw_back\', \'{iid}\')" '
+        f'title="Return to Upcoming">←</button>'
     )
+    img_html = _img_wrap_html(_img(item), arrow_overlay, height=200)
+
     bottom_html = "".join(
         _ro_field(_fval(item, f), ph)
         for f, ph in [
@@ -730,30 +790,14 @@ def _cw_card(item: dict):
         ]
     )
 
+    # Entire card is clickable — toggles selection via JS → query param
     st.markdown(
-        f'<div class="ro-card" style="border:{border};margin-bottom:4px;">'
-        f'{fields_html}{img_html}{bottom_html}</div>',
+        f'<div class="ap-card {sel_cls}" '
+        f'onclick="apAction(\'cw_sel\', \'{iid}\')">'
+        f'{fields_html}{img_html}{bottom_html}'
+        f'</div>',
         unsafe_allow_html=True
     )
-
-    # ── Buttons ───────────────────────────────────────────────
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        label = "✓ SELECTED" if selected else "SELECT"
-        btn_t = "primary" if selected else "secondary"
-        if st.button(label, key=f"cw_sel_{iid}",
-                     type=btn_t, use_container_width=True):
-            if selected:
-                st.session_state.sel_cw.discard(iid)
-            else:
-                st.session_state.sel_cw.add(iid)
-            st.rerun()
-    with c2:
-        if st.button("← UPCOMING", key=f"cw_back_{iid}",
-                     type="secondary", use_container_width=True):
-            st.session_state.sel_cw.discard(iid)
-            set_status(iid, "upcoming")
-            st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -762,7 +806,6 @@ def _cw_card(item: dict):
 def page_catalog():
     items   = load_items()
     catalog = [i for i in items if i.get("status") == "catalog"]
-    # Most recent first
     catalog.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
 
     st.markdown('<div class="page-title">≡ HOME FRAGRANCE CATALOG</div>',
@@ -798,20 +841,20 @@ def page_catalog():
         st.markdown('</div>', unsafe_allow_html=True)
         return
 
-    cols = st.columns(4, gap="small")
+    cols = st.columns(5, gap="small")
     for idx, item in enumerate(filtered):
-        with cols[idx % 4]:
+        with cols[idx % 5]:
             _catalog_card(item)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 
 def _catalog_card(item: dict):
-    iid = str(item["id"])
+    iid     = str(item["id"])
+    confirm = st.session_state.get("confirm_delete_id") == iid
 
-    # Info text (no bottom text in catalog)
     info_lines = [
-        _fval(item, f) or ph
+        (_fval(item, f) or ph, bool(_fval(item, f)))
         for f, ph in [
             ("brand",       "BRAND/COLLECTION"),
             ("candle_name", "CANDLE NAME"),
@@ -820,57 +863,72 @@ def _catalog_card(item: dict):
         ]
     ]
     info_html = "<br>".join(
-        f'<span style="color:{"#1A1A1A" if _fval(item,f) else "#C7C7CC"}">{v}</span>'
-        for v, (f, _) in zip(info_lines, [
-            ("brand",""), ("candle_name",""), ("season",""), ("pvr","")
-        ])
+        f'<span style="color:{"#1A1A1A" if has_val else "#C7C7CC"}">{text}</span>'
+        for text, has_val in info_lines
     )
 
-    img_html = (
-        f'<img class="cat-card-img" src="{_img(item)}">'
-        if _img(item)
-        else '<div class="cat-card-noimg">No image</div>'
+    # Hover icons: ♻ (reshoot) and 🗑 (delete confirm) in top-right of image
+    cat_overlay = (
+        f'<button class="hover-btn hover-btn-tr2" '
+        f'onclick="apAction(\'cat_reshoot\', \'{iid}\')" title="Request Reshoot">♻</button>'
+        f'<button class="hover-btn hover-btn-tr" '
+        f'onclick="apAction(\'cat_delete_ask\', \'{iid}\')" title="Delete">🗑</button>'
+    )
+
+    img_url = _img(item)
+    if img_url:
+        img_inner = f'<img src="{img_url}" style="width:100%;height:220px;object-fit:cover;display:block;">'
+    else:
+        img_inner = ('<div class="noimg" style="height:220px;background:#EBEBEB;'
+                     'display:flex;align-items:center;justify-content:center;'
+                     'color:#C7C7CC;font-size:13px;">No image</div>')
+
+    img_section = (
+        f'<div class="cat-img-wrap">'
+        f'{img_inner}'
+        f'<div class="hover-overlay">{cat_overlay}</div>'
+        f'</div>'
     )
 
     st.markdown(
         f'<div class="cat-card">'
         f'<div class="cat-card-info">{info_html}</div>'
-        f'{img_html}</div>',
+        f'{img_section}'
+        f'</div>',
         unsafe_allow_html=True
     )
 
-    # ── Image upload (replace) ────────────────────────────────
-    new_img = st.file_uploader(
-        "Replace image",
-        type=["png","jpg","jpeg","webp","gif"],
-        key=f"cat_img_{iid}",
-        label_visibility="collapsed"
+    # ── URL paste field ───────────────────────────────────────
+    key_url = f"cat_url_{iid}"
+    st.markdown('<div class="url-paste-wrap">', unsafe_allow_html=True)
+    new_url = st.text_input(
+        "Image URL", value=img_url,
+        placeholder="PASTE IMAGE URL FROM DAM",
+        key=key_url, label_visibility="collapsed"
     )
-    if new_img:
-        with st.spinner("Uploading…"):
-            url = upload_image(new_img.read(), new_img.name, new_img.type)
-            save_field(iid, "image_url", url)
+    st.markdown('</div>', unsafe_allow_html=True)
+    if new_url.strip() != img_url and new_url.strip():
+        save_field(iid, "image_url", new_url.strip())
         st.rerun()
 
-    # ── Action buttons ────────────────────────────────────────
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        if st.button("♻ RESHOOT", key=f"cat_re_{iid}",
-                     type="primary", use_container_width=True):
-            new_id = copy_to_reshoot(item)
-            send_slack(
-                f"🔁 *Reshoot requested*\n"
-                f"*{_fval(item,'candle_name') or 'Unnamed'}*"
-                f" — {_fval(item,'brand') or ''}"
-                f" ({_fval(item,'season') or ''})"
-            )
-            st.success("Copied to Reshoot Requests!")
-            st.rerun()
-    with c2:
-        if st.button("🗑 DELETE", key=f"cat_del_{iid}",
-                     type="secondary", use_container_width=True):
-            delete_item(iid)
-            st.rerun()
+    # ── Delete confirmation (replaces normal state) ───────────
+    if confirm:
+        st.markdown(
+            '<div class="del-confirm-bar">Are you sure you want to delete this?</div>',
+            unsafe_allow_html=True
+        )
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("YES, DELETE", key=f"cat_conf_{iid}",
+                         type="primary", use_container_width=True):
+                delete_item(iid)
+                st.session_state.confirm_delete_id = None
+                st.rerun()
+        with c2:
+            if st.button("CANCEL", key=f"cat_canc_{iid}",
+                         type="secondary", use_container_width=True):
+                st.session_state.confirm_delete_id = None
+                st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -888,7 +946,7 @@ def page_reshoot():
     # ── Action bar (when items selected) ─────────────────────
     if sel:
         st.markdown('<div class="padded action-bar">', unsafe_allow_html=True)
-        c1, c2, c3, _ = st.columns([2, 2, 2, 4])
+        c1, c2, _ = st.columns([2, 2, 6])
         with c1:
             if st.button(f"MOVE TO UPCOMING  ({len(sel)})",
                          type="primary", use_container_width=True):
@@ -915,11 +973,6 @@ def page_reshoot():
                     )
                 st.session_state.sel_reshoot = set()
                 st.rerun()
-        with c3:
-            if st.button("CLEAR SELECTION", type="secondary",
-                         use_container_width=True):
-                st.session_state.sel_reshoot = set()
-                st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
     if not reshoot:
@@ -934,9 +987,9 @@ def page_reshoot():
         return
 
     st.markdown('<div class="padded">', unsafe_allow_html=True)
-    cols = st.columns(4, gap="small")
+    cols = st.columns(5, gap="small")
     for idx, item in enumerate(reshoot):
-        with cols[idx % 4]:
+        with cols[idx % 5]:
             _reshoot_card(item)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -944,9 +997,8 @@ def page_reshoot():
 def _reshoot_card(item: dict):
     iid      = str(item["id"])
     selected = iid in st.session_state.sel_reshoot
-    border   = "2px solid #1A73E8" if selected else "1px solid #DEDEDE"
+    sel_cls  = "selected" if selected else ""
 
-    # Top fields (read-only)
     fields_html = "".join(
         _ro_field(_fval(item, f), ph)
         for f, ph in [
@@ -956,53 +1008,48 @@ def _reshoot_card(item: dict):
             ("pvr",         "PVR"),
         ]
     )
-    # Image (not editable)
-    img_html = (
-        f'<img class="ro-card-img" src="{_img(item)}">'
-        if _img(item)
-        else '<div class="ro-card-noimg">No image</div>'
-    )
-    # Scent notes (read-only)
-    scent_html = _ro_field(_fval(item, "scent_notes"), "SCENT NOTES")
+    img_html    = _img_wrap_html(_img(item), "", height=200)
+    scent_html  = _ro_field(_fval(item, "scent_notes"), "SCENT NOTES")
 
+    # Entire card is clickable — toggles selection
     st.markdown(
-        f'<div class="ro-card" style="border:{border};margin-bottom:4px;">'
-        f'{fields_html}{img_html}{scent_html}</div>',
+        f'<div class="ap-card {sel_cls}" '
+        f'onclick="apAction(\'re_sel\', \'{iid}\')">'
+        f'{fields_html}{img_html}{scent_html}'
+        f'</div>',
         unsafe_allow_html=True
     )
 
-    # ── Ops Notes (EDITABLE) ──────────────────────────────────
+    # ── Ops Notes (EDITABLE — sits below the clickable card) ──
     key_ops = f"re_ops_{iid}"
     def _save_ops(k=key_ops, i=iid):
         v = st.session_state.get(k, "")
         save_field(i, "ops_notes", v)
 
-    with st.container(border=True):
-        st.text_input(
-            "OPS NOTES",
-            value=_fval(item, "ops_notes"),
-            key=key_ops,
-            on_change=_save_ops,
-            placeholder="OPS NOTES",
-            label_visibility="collapsed"
-        )
-
-    # ── Select button ─────────────────────────────────────────
-    label = "✓ SELECTED" if selected else "SELECT"
-    btn_t = "primary" if selected else "secondary"
-    if st.button(label, key=f"re_sel_{iid}",
-                 type=btn_t, use_container_width=True):
-        if selected:
-            st.session_state.sel_reshoot.discard(iid)
-        else:
-            st.session_state.sel_reshoot.add(iid)
-        st.rerun()
+    # Style ops notes to look like a card extension
+    st.markdown(
+        '<div style="background:white;border:1px solid #DEDEDE;border-top:none;'
+        'border-radius:0 0 6px 6px;overflow:hidden;margin-top:-8px;margin-bottom:8px;">',
+        unsafe_allow_html=True
+    )
+    st.text_input(
+        "OPS NOTES",
+        value=_fval(item, "ops_notes"),
+        key=key_ops,
+        on_change=_save_ops,
+        placeholder="OPS NOTES",
+        label_visibility="collapsed"
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────────────────────────────
 def main():
+    _init()
+    _handle_actions()
+
     tab1, tab2, tab3, tab4 = st.tabs([
         "⏱  Upcoming in Studio",
         "☐  Current Week",
