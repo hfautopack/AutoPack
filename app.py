@@ -33,12 +33,12 @@ st.set_page_config(
 #  SVG ICONS (used in hover buttons + placeholder rectangle)
 # ─────────────────────────────────────────────────────────────────
 SVG_ARROW = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    '<svg viewBox="0 0 24 24" fill="none" stroke="white" '
     'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>'
 )
 SVG_RECYCLE = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    '<svg viewBox="0 0 24 24" fill="none" stroke="white" '
     'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>'
     '<path d="M21 3v5h-5"/>'
@@ -46,7 +46,7 @@ SVG_RECYCLE = (
     '<path d="M8 16H3v5"/></svg>'
 )
 SVG_TRASH = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    '<svg viewBox="0 0 24 24" fill="none" stroke="white" '
     'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
     '<path d="M3 6h18"/>'
     '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
@@ -70,7 +70,8 @@ RED        = "#EF4444"
 RED_HOVER  = "#DC2626"
 BORDER     = "#DEDEDE"
 PAGE_BG    = "#F4F4F6"
-SIDE_PAD   = "32px"
+SIDE_PAD   = "48px"
+ROW_GAP    = "48px"  # vertical gap between rows of cards (matches SIDE_PAD)
 
 st.markdown(f"""
 <style>
@@ -204,7 +205,7 @@ div[data-testid="stVerticalBlock"] {{ gap: 0 !important; }}
     border: 2px solid transparent;
     border-radius: 6px;
     padding: 2px;
-    margin-bottom: 8px;
+    margin-bottom: {ROW_GAP};
     cursor: pointer;
     transition: border-color 0.15s;
     user-select: none;
@@ -444,9 +445,41 @@ div.stButton > button[kind="secondary"] {{
 }}
 
 /* ── Misc: column gap, image margins ────────────────────── */
-div[data-testid="stHorizontalBlock"] {{ gap: 10px !important; }}
+div[data-testid="stHorizontalBlock"] {{
+    gap: 16px !important;
+    margin-bottom: {ROW_GAP};
+}}
 div[data-testid="stImage"] {{ margin: 0 !important; }}
 div[data-testid="stImage"] img {{ border-radius: 4px; }}
+
+/* ── Force white text + no underline on all anchor controls ── */
+/* (Streamlit forces target="_blank" on <a> in user markdown, and
+   its default link styling can override our color/decoration.) */
+a.ro-field,
+a.hover-btn,
+a.ap-control-btn,
+a.img-click-link,
+.ap-card a,
+.ap-controls a {{
+    text-decoration: none !important;
+    text-underline-offset: 0 !important;
+}}
+a.ap-control-btn,
+a.ap-control-btn:link,
+a.ap-control-btn:visited,
+a.ap-control-btn:hover,
+a.ap-control-btn:active {{
+    color: white !important;
+}}
+a.hover-btn,
+a.hover-btn:link,
+a.hover-btn:visited,
+a.hover-btn:hover,
+a.hover-btn:active {{
+    color: white !important;
+}}
+a.ro-field {{ color: #1A1A1A !important; }}
+a.ro-field.placeholder {{ color: #C7C7CC !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -722,7 +755,7 @@ def _ro_field(value: str, placeholder: str, href: str = "") -> str:
     cls     = "ro-field" if has_val else "ro-field placeholder"
     text    = value if has_val else placeholder
     if href:
-        return f'<a class="{cls}" href="{href}">{text}</a>'
+        return f'<a class="{cls}" href="{href}" target="_self">{text}</a>'
     return f'<div class="{cls}">{text}</div>'
 
 
@@ -747,7 +780,8 @@ def _img_wrap_html(img_url: str, overlay_html: str = "",
     else:
         inner = f'<div class="empty">{SVG_IMAGE}<span>No image</span></div>'
     click_link = (
-        f'<a class="img-click-link" href="{click_href}"></a>' if click_href else ''
+        f'<a class="img-click-link" href="{click_href}" target="_self"></a>'
+        if click_href else ''
     )
     overlay = (
         f'<div class="hover-overlay">{overlay_html}</div>' if overlay_html else ''
@@ -803,9 +837,9 @@ def page_upcoming():
     with cols[COLS]:
         st.markdown(
             f'<div class="ap-controls">'
-            f'<a class="ap-control-btn ap-control-add" '
+            f'<a class="ap-control-btn ap-control-add" target="_self" '
             f'href="?ap_action=add_card&ap_id=_" title="Add new product slot">+</a>'
-            f'<a class="ap-control-btn ap-control-rem" '
+            f'<a class="ap-control-btn ap-control-rem" target="_self" '
             f'href="?ap_action=rem_card&ap_id=_" title="Remove last empty slot">−</a>'
             f'</div>',
             unsafe_allow_html=True,
@@ -972,7 +1006,7 @@ def _cw_card(item: dict):
 
     # Top-left blue back-arrow → returns card to Upcoming.
     arrow_overlay = (
-        f'<a class="hover-btn hover-btn-blue hover-btn-tl" '
+        f'<a class="hover-btn hover-btn-blue hover-btn-tl" target="_self" '
         f'href="?ap_action=cw_back&ap_id={iid}" title="Return to Upcoming">'
         f'{SVG_ARROW}</a>'
     )
@@ -1063,10 +1097,10 @@ def _catalog_card(item: dict):
 
     # Top-right hover buttons: blue recycle (reshoot) + red trash (delete).
     cat_overlay = (
-        f'<a class="hover-btn hover-btn-blue hover-btn-tr2" '
+        f'<a class="hover-btn hover-btn-blue hover-btn-tr2" target="_self" '
         f'href="?ap_action=cat_reshoot&ap_id={iid}" title="Request Reshoot">'
         f'{SVG_RECYCLE}</a>'
-        f'<a class="hover-btn hover-btn-red hover-btn-tr" '
+        f'<a class="hover-btn hover-btn-red hover-btn-tr" target="_self" '
         f'href="?ap_action=cat_delete_ask&ap_id={iid}" title="Delete">'
         f'{SVG_TRASH}</a>'
     )
